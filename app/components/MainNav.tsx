@@ -8,6 +8,7 @@ const navItems = [
   { label: "Dashboard", href: "/dashboard" },
   { label: "Upload Portfolio", href: "/portfolio-upload" },
   { label: "Board Pack", href: "/board-pack" },
+  { label: "Action Tracker", href: "/action-tracker" },
 ];
 
 export default function MainNav() {

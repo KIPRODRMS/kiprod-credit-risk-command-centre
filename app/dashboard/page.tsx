@@ -116,12 +116,28 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <a
-            href="/portfolio-upload"
-            className="rounded-full bg-slate-950 px-5 py-3 text-center text-sm font-semibold text-white"
-          >
-            Upload Portfolio
-          </a>
+         <div className="flex flex-col gap-3 sm:flex-row">
+  <a
+    href="/portfolio-upload"
+    className="rounded-full bg-slate-950 px-5 py-3 text-center text-sm font-semibold text-white"
+  >
+    Upload New Data
+  </a>
+
+  <a
+    href="/board-pack"
+    className="rounded-full bg-amber-400 px-5 py-3 text-center text-sm font-semibold text-slate-950"
+  >
+    Generate Board Pack
+  </a>
+
+  <a
+    href="/action-tracker"
+    className="rounded-full border border-slate-300 bg-white px-5 py-3 text-center text-sm font-semibold text-slate-800"
+  >
+    Open Action Tracker
+  </a>
+</div>
         </div>
 
         {records.length === 0 ? (
@@ -170,7 +186,51 @@ export default function DashboardPage() {
                 </h2>
               </div>
             </div>
+<div className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
+  <p className="text-sm font-semibold uppercase tracking-wide text-amber-600">
+    Management Interpretation
+  </p>
 
+  <h2 className="mt-2 text-xl font-bold text-slate-950">
+    Portfolio Risk Position
+  </h2>
+
+  <p className="mt-3 leading-7 text-slate-700">
+    The uploaded portfolio contains{" "}
+    <strong>{records.length}</strong> loan accounts with a total
+    approved portfolio value of{" "}
+    <strong>{formatKes(metrics.totalPortfolio)}</strong>. The
+    current outstanding balance is{" "}
+    <strong>{formatKes(metrics.outstandingBalance)}</strong>, while
+    arrears stand at{" "}
+    <strong>{formatKes(metrics.totalArrears)}</strong>.
+  </p>
+
+  <p className="mt-3 leading-7 text-slate-700">
+    The early warning position shows{" "}
+    <strong>{metrics.watchlistAccounts}</strong> watchlist accounts and{" "}
+    <strong>{metrics.nplAccounts}</strong> NPL accounts. Management
+    should prioritize Red and NPL accounts, review risky employers and
+    branches, and assign follow-up actions through the Management
+    Action Tracker.
+  </p>
+
+  <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+    <a
+      href="/board-pack"
+      className="rounded-full bg-amber-400 px-5 py-3 text-center text-sm font-semibold text-slate-950"
+    >
+      Generate Board Pack
+    </a>
+
+    <a
+      href="/action-tracker"
+      className="rounded-full bg-slate-950 px-5 py-3 text-center text-sm font-semibold text-white"
+    >
+      Assign Management Actions
+    </a>
+  </div>
+</div>
             <div className="mt-4 grid gap-4 md:grid-cols-4">
               <div className="rounded-2xl bg-white p-5 shadow-sm">
                 <p className="text-sm text-slate-500">Watchlist Accounts</p>
