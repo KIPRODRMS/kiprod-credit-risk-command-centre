@@ -357,9 +357,19 @@ export default function DashboardPage() {
                           {record.days_in_arrears}
                         </td>
                         <td className="py-3">
-                          <span className="rounded-full bg-slate-200 px-3 py-1 text-xs font-bold text-slate-900">
-                            {record.risk_status}
-                          </span>
+                          <span
+  className={`rounded-full px-3 py-1 text-xs font-bold ${
+    record.risk_status === "Amber"
+      ? "bg-amber-200 text-amber-900"
+      : record.risk_status === "Red"
+      ? "bg-red-200 text-red-900"
+      : record.risk_status === "NPL"
+      ? "bg-red-700 text-white"
+      : "bg-green-200 text-green-900"
+  }`}
+>
+  {record.risk_status}
+</span>
                         </td>
                       </tr>
                     ))}
