@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
+import { Manrope } from "next/font/google";
 import "./globals.css";
 import MainNav from "./components/MainNav";
+
+const manrope = Manrope({
+  subsets: ["latin"],
+  variable: "--font-manrope",
+});
 
 export const metadata: Metadata = {
   title: "KIPROD Credit Risk Command Centre",
@@ -15,7 +21,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>
+      <body className={manrope.className}>
         <MainNav />
         {children}
       </body>

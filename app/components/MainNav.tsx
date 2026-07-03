@@ -5,11 +5,11 @@ import { usePathname } from "next/navigation";
 
 const navItems = [
   { label: "Home", href: "/" },
-  { label: "Executive Dashboard", href: "/executive-dashboard" },
-  { label: "Dashboard", href: "/dashboard" },
-  { label: "Upload Portfolio", href: "/portfolio-upload" },
-  { label: "Board Pack", href: "/board-pack" },
-  { label: "Action Tracker", href: "/action-tracker" },
+  { label: "Executive Cockpit", href: "/executive-dashboard" },
+  { label: "Portfolio Upload", href: "/portfolio-upload" },
+  { label: "Early Warning", href: "/early-warning" },
+  { label: "Execution Tracker", href: "/action-tracker" },
+  { label: "Board Report", href: "/board-pack" },
 ];
 
 export default function MainNav() {
