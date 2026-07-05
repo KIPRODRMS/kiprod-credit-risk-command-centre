@@ -22,6 +22,7 @@ type PortfolioRow = {
   repayment_status?: string;
   responsible_officer?: string;
   responsibleOfficer?: string;
+  assignedOfficer?: string;
   assignedTo?: string;
   restructured?: string;
   risk_status?: string;
@@ -765,4 +766,29 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 800,
     verticalAlign: "top",
   },
+  actions: {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "14px",
+  marginTop: "24px",
+},
+
+primaryButton: {
+  background: "#d6a84f",
+  color: "#080b12",
+  textDecoration: "none",
+  borderRadius: "999px",
+  padding: "13px 20px",
+  fontWeight: 900,
+},
+
+secondaryButton: {
+  background: "rgba(16, 22, 33, 0.88)",
+  color: "#f5f0e6",
+  textDecoration: "none",
+  border: "1px solid rgba(214,168,79,0.3)",
+  borderRadius: "999px",
+  padding: "13px 20px",
+  fontWeight: 800,
+},
 };
