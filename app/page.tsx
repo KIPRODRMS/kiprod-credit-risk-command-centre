@@ -15,28 +15,28 @@ export default function Home() {
           management action tracking for financial institutions.
         </p>
 
-       <div className="mt-10 flex flex-col gap-4 sm:flex-row">
-  <a
-    href="/dashboard"
-    className="rounded-full bg-amber-400 px-6 py-3 font-semibold text-slate-950"
-  >
-    Open Dashboard
-  </a>
+        <div className="mt-10 flex flex-col gap-4 sm:flex-row">
+          <a
+            href="/executive-dashboard"
+            className="rounded-full bg-amber-400 px-6 py-3 font-semibold text-slate-950"
+          >
+            Open Executive Cockpit
+          </a>
 
-  <a
-    href="/portfolio-upload"
-    className="rounded-full border border-slate-600 px-6 py-3 font-semibold text-white"
-  >
-    Upload Portfolio
-  </a>
+          <a
+            href="/portfolio-upload"
+            className="rounded-full border border-slate-600 px-6 py-3 font-semibold text-white"
+          >
+            Upload Portfolio
+          </a>
 
-  <a
-    href="/early-warning"
-    className="rounded-full border border-amber-400 px-6 py-3 font-semibold text-amber-400"
-  >
-    Early Warning
-  </a>
-</div>
+          <a
+            href="/early-warning"
+            className="rounded-full border border-amber-400 px-6 py-3 font-semibold text-amber-400"
+          >
+            View Early Warning
+          </a>
+        </div>
       </section>
     </main>
   );

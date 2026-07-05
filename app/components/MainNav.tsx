@@ -8,6 +8,7 @@ const navItems = [
   { label: "Executive Cockpit", href: "/executive-dashboard" },
   { label: "Portfolio Upload", href: "/portfolio-upload" },
   { label: "Early Warning", href: "/early-warning" },
+  { label: "Watchlist", href: "/watchlist" },
   { label: "Execution Tracker", href: "/action-tracker" },
   { label: "Board Report", href: "/board-pack" },
 ];
