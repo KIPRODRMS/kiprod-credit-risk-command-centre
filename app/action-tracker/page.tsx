@@ -31,6 +31,19 @@ type ActionItem = {
   notes: string;
 };
 
+type AuditLog = {
+  id: string;
+  createdAt: string;
+  module: string;
+  actionType: string;
+  recordRef: string;
+  oldValue: string;
+  newValue: string;
+  role: string;
+  user: string;
+  note: string;
+};
+
 function getDefaultAction(record: LoanRecord): string {
   if (record.risk_status === "Amber") {
     return "Contact member and confirm next repayment date.";
@@ -45,6 +58,99 @@ function getDefaultAction(record: LoanRecord): string {
   }
 
   return "Monitor account.";
+}
+
+function getCurrentRole(): string {
+  return localStorage.getItem("kiprodCurrentRole") || "MVP User";
+}
+
+function getAuditActionType(field: keyof ActionItem): string {
+  if (field === "assigned_to") return "ACTION_OFFICER_CHANGED";
+  if (field === "due_date") return "ACTION_DUE_DATE_CHANGED";
+  if (field === "status") return "ACTION_STATUS_CHANGED";
+  if (field === "notes") return "ACTION_NOTE_UPDATED";
+  if (field === "action_required") return "ACTION_REQUIRED_UPDATED";
+
+  return "ACTION_UPDATED";
+}
+
+function createAuditLog(params: {
+  action: ActionItem;
+  field: keyof ActionItem;
+  oldValue: string;
+  newValue: string;
+}) {
+  if (params.oldValue === params.newValue) return;
+
+  const existingRaw = localStorage.getItem("kiprodAuditLogs");
+  let existingLogs: AuditLog[] = [];
+
+  if (existingRaw) {
+    try {
+      const parsed = JSON.parse(existingRaw);
+      existingLogs = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      existingLogs = [];
+    }
+  }
+
+  const role = getCurrentRole();
+
+  const newLog: AuditLog = {
+    id: `audit-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    createdAt: new Date().toISOString(),
+    module: "Action Tracker",
+    actionType: getAuditActionType(params.field),
+    recordRef: `${params.action.loan_account} - ${params.action.member_name}`,
+    oldValue: params.oldValue || "Blank",
+    newValue: params.newValue || "Blank",
+    role,
+    user: role,
+    note: `Action Tracker field "${params.field}" changed for ${params.action.member_name}.`,
+  };
+
+  localStorage.setItem(
+    "kiprodAuditLogs",
+    JSON.stringify([newLog, ...existingLogs])
+  );
+}
+
+function createBulkAuditLog(params: {
+  actionType: string;
+  recordRef: string;
+  note: string;
+}) {
+  const existingRaw = localStorage.getItem("kiprodAuditLogs");
+  let existingLogs: AuditLog[] = [];
+
+  if (existingRaw) {
+    try {
+      const parsed = JSON.parse(existingRaw);
+      existingLogs = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      existingLogs = [];
+    }
+  }
+
+  const role = getCurrentRole();
+
+  const newLog: AuditLog = {
+    id: `audit-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    createdAt: new Date().toISOString(),
+    module: "Action Tracker",
+    actionType: params.actionType,
+    recordRef: params.recordRef,
+    oldValue: "Previous action register",
+    newValue: "Regenerated action register",
+    role,
+    user: role,
+    note: params.note,
+  };
+
+  localStorage.setItem(
+    "kiprodAuditLogs",
+    JSON.stringify([newLog, ...existingLogs])
+  );
 }
 
 export default function ActionTrackerPage() {
@@ -83,6 +189,12 @@ export default function ActionTrackerPage() {
           "kiprod_action_items",
           JSON.stringify(starterActions)
         );
+
+        createBulkAuditLog({
+          actionType: "ACTION_REGISTER_CREATED",
+          recordRef: "Action Tracker",
+          note: "Action register created automatically from uploaded portfolio data.",
+        });
       }
     }
   }, []);
@@ -105,19 +217,37 @@ export default function ActionTrackerPage() {
     field: keyof ActionItem,
     value: string
   ) {
+    const targetAction = actions.find(
+      (action) => action.loan_account === loanAccount
+    );
+
+    if (!targetAction) return;
+
+    const oldValue = String(targetAction[field] || "");
+    const newValue = value;
+
     const updatedActions = actions.map((action) =>
       action.loan_account === loanAccount
         ? { ...action, [field]: value }
         : action
     );
 
+    createAuditLog({
+      action: targetAction,
+      field,
+      oldValue,
+      newValue,
+    });
+
     setActions(updatedActions);
     localStorage.setItem("kiprod_action_items", JSON.stringify(updatedActions));
-    setMessage("Action tracker updated.");
+    setMessage("Action tracker updated and audit history recorded.");
   }
 
   function resetActionsFromPortfolio() {
-    const riskyRecords = records.filter((record) => record.risk_status !== "Green");
+    const riskyRecords = records.filter(
+      (record) => record.risk_status !== "Green"
+    );
 
     const starterActions: ActionItem[] = riskyRecords.map((record) => ({
       loan_account: record.loan_account,
@@ -132,7 +262,16 @@ export default function ActionTrackerPage() {
 
     setActions(starterActions);
     localStorage.setItem("kiprod_action_items", JSON.stringify(starterActions));
-    setMessage("Action tracker regenerated from the latest portfolio data.");
+
+    createBulkAuditLog({
+      actionType: "ACTION_REGISTER_REGENERATED",
+      recordRef: "Action Tracker",
+      note: "Action tracker was regenerated from the latest portfolio data.",
+    });
+
+    setMessage(
+      "Action tracker regenerated from the latest portfolio data and audit history recorded."
+    );
   }
 
   return (
@@ -143,12 +282,19 @@ export default function ActionTrackerPage() {
             <p className="text-sm font-semibold uppercase tracking-wide text-amber-600">
               KIPROD Command Centre
             </p>
+
             <h1 className="text-3xl font-bold text-slate-950">
               Management Action Tracker
             </h1>
+
             <p className="mt-2 max-w-3xl text-slate-600">
               Convert early warning accounts into assigned management actions,
               due dates, follow-up notes, and escalation status.
+            </p>
+
+            <p className="mt-2 max-w-3xl text-sm font-medium text-slate-500">
+              Audit-enabled: changes to officer, due date, status, notes and
+              action required are now recorded in Audit History.
             </p>
           </div>
 
@@ -165,10 +311,12 @@ export default function ActionTrackerPage() {
             <h2 className="text-xl font-bold text-slate-950">
               No portfolio data available
             </h2>
+
             <p className="mt-2 text-slate-600">
               Upload portfolio data first, then return here to create action
               items.
             </p>
+
             <a
               href="/portfolio-upload"
               className="mt-6 inline-block rounded-full bg-amber-400 px-6 py-3 font-semibold text-slate-950"
@@ -222,12 +370,24 @@ export default function ActionTrackerPage() {
             )}
 
             <div className="mt-8 rounded-2xl bg-white p-6 shadow-sm">
-              <h2 className="text-xl font-bold text-slate-950">
-                Action Register
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Generated from Amber, Red, and NPL accounts.
-              </p>
+              <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-950">
+                    Action Register
+                  </h2>
+
+                  <p className="mt-1 text-sm text-slate-500">
+                    Generated from Amber, Red, and NPL accounts.
+                  </p>
+                </div>
+
+                <a
+                  href="/audit-history"
+                  className="rounded-full border border-amber-300 px-5 py-2 text-sm font-semibold text-slate-950"
+                >
+                  View Audit History
+                </a>
+              </div>
 
               <div className="mt-5 overflow-x-auto">
                 <table className="w-full min-w-[1100px] text-left text-sm">
@@ -252,18 +412,18 @@ export default function ActionTrackerPage() {
 
                         <td className="py-3">
                           <span
-  className={`rounded-full px-3 py-1 text-xs font-bold ${
-    action.risk_status === "Amber"
-      ? "bg-amber-200 text-amber-900"
-      : action.risk_status === "Red"
-      ? "bg-red-200 text-red-900"
-      : action.risk_status === "NPL"
-      ? "bg-red-700 text-white"
-      : "bg-green-200 text-green-900"
-  }`}
->
-  {action.risk_status}
-</span>
+                            className={`rounded-full px-3 py-1 text-xs font-bold ${
+                              action.risk_status === "Amber"
+                                ? "bg-amber-200 text-amber-900"
+                                : action.risk_status === "Red"
+                                ? "bg-red-200 text-red-900"
+                                : action.risk_status === "NPL"
+                                ? "bg-red-700 text-white"
+                                : "bg-green-200 text-green-900"
+                            }`}
+                          >
+                            {action.risk_status}
+                          </span>
                         </td>
 
                         <td className="py-3">
