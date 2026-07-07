@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
 
 type ClarificationStatus =
   | "Pending Management Response"
@@ -12,32 +13,20 @@ type ClarificationStatus =
 
 type ClarificationRequest = {
   id: string;
-  createdAt: string;
-  respondedAt: string;
-  reviewedAt: string;
-  requestTitle: string;
-  loanAccount: string;
-  memberName: string;
-  issueType: string;
+  institution_id: string;
+  request_title: string;
+  loan_account: string | null;
+  member_name: string | null;
+  issue_type: string | null;
   question: string;
-  requestedByRole: string;
-  assignedTo: string;
+  requested_by_role: string | null;
+  assigned_to: string | null;
   status: ClarificationStatus;
-  managementResponse: string;
-  boardReviewNotes: string;
-};
-
-type AuditLog = {
-  id: string;
-  createdAt: string;
-  module: string;
-  actionType: string;
-  recordRef: string;
-  oldValue: string;
-  newValue: string;
-  role: string;
-  user: string;
-  note: string;
+  management_response: string | null;
+  board_review_notes: string | null;
+  created_at: string;
+  responded_at: string | null;
+  reviewed_at: string | null;
 };
 
 const emptyForm = {
@@ -49,69 +38,16 @@ const emptyForm = {
   assignedTo: "",
 };
 
+function getInstitutionId(): string {
+  return process.env.NEXT_PUBLIC_DEFAULT_INSTITUTION_ID || "";
+}
+
 function getCurrentRole(): string {
   if (typeof window === "undefined") return "MVP User";
-
   return localStorage.getItem("kiprodCurrentRole") || "MVP User";
 }
 
-function readRequests(): ClarificationRequest[] {
-  const raw = localStorage.getItem("kiprodClarificationRequests");
-  if (!raw) return [];
-
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveRequests(requests: ClarificationRequest[]) {
-  localStorage.setItem("kiprodClarificationRequests", JSON.stringify(requests));
-}
-
-function createAuditLog(params: {
-  actionType: string;
-  recordRef: string;
-  oldValue: string;
-  newValue: string;
-  note: string;
-}) {
-  const existingRaw = localStorage.getItem("kiprodAuditLogs");
-  let existingLogs: AuditLog[] = [];
-
-  if (existingRaw) {
-    try {
-      const parsed = JSON.parse(existingRaw);
-      existingLogs = Array.isArray(parsed) ? parsed : [];
-    } catch {
-      existingLogs = [];
-    }
-  }
-
-  const role = getCurrentRole();
-
-  const newLog: AuditLog = {
-    id: `audit-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    createdAt: new Date().toISOString(),
-    module: "Clarification Requests",
-    actionType: params.actionType,
-    recordRef: params.recordRef,
-    oldValue: params.oldValue,
-    newValue: params.newValue,
-    role,
-    user: role,
-    note: params.note,
-  };
-
-  localStorage.setItem(
-    "kiprodAuditLogs",
-    JSON.stringify([newLog, ...existingLogs])
-  );
-}
-
-function formatDate(value: string): string {
+function formatDate(value: string | null): string {
   if (!value) return "Not yet";
 
   const date = new Date(value);
@@ -168,6 +104,31 @@ function getStatusStyle(status: ClarificationStatus): React.CSSProperties {
   };
 }
 
+async function createAuditLog(params: {
+  actionType: string;
+  recordRef: string;
+  oldValue: string;
+  newValue: string;
+  note: string;
+}) {
+  const institutionId = getInstitutionId();
+  const role = getCurrentRole();
+
+  if (!institutionId) return;
+
+  await supabase.from("audit_logs").insert({
+    institution_id: institutionId,
+    module: "Clarification Requests",
+    action_type: params.actionType,
+    record_ref: params.recordRef,
+    old_value: params.oldValue,
+    new_value: params.newValue,
+    role,
+    user_name: role,
+    note: params.note,
+  });
+}
+
 export default function ClarificationRequestsPage() {
   const [requests, setRequests] = useState<ClarificationRequest[]>([]);
   const [selectedRequestId, setSelectedRequestId] = useState("");
@@ -175,29 +136,46 @@ export default function ClarificationRequestsPage() {
   const [message, setMessage] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [currentRole, setCurrentRole] = useState("MVP User");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setCurrentRole(getCurrentRole());
-    const existingRequests = readRequests();
-    
-
-    const upgradedRequests = existingRequests.map((request: any) => ({
-      ...request,
-      reviewedAt: request.reviewedAt || "",
-      boardReviewNotes: request.boardReviewNotes || "",
-      status:
-        request.status === "Responded"
-          ? "Under Board Review"
-          : request.status || "Pending Management Response",
-    }));
-
-    setRequests(upgradedRequests);
-    saveRequests(upgradedRequests);
-
-    if (upgradedRequests.length > 0) {
-      setSelectedRequestId(upgradedRequests[0].id);
-    }
+    loadRequests();
   }, []);
+
+  async function loadRequests() {
+    const institutionId = getInstitutionId();
+
+    if (!institutionId) {
+      setMessage("Missing NEXT_PUBLIC_DEFAULT_INSTITUTION_ID in .env.local.");
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+
+    const { data, error } = await supabase
+      .from("clarification_requests")
+      .select("*")
+      .eq("institution_id", institutionId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      setMessage(`Failed to load clarification requests: ${error.message}`);
+      setLoading(false);
+      return;
+    }
+
+    const loadedRequests = (data || []) as ClarificationRequest[];
+
+    setRequests(loadedRequests);
+
+    if (loadedRequests.length > 0 && !selectedRequestId) {
+      setSelectedRequestId(loadedRequests[0].id);
+    }
+
+    setLoading(false);
+  }
 
   const summary = useMemo(() => {
     return {
@@ -236,136 +214,181 @@ export default function ClarificationRequestsPage() {
       [field]: value,
     }));
   }
+console.log("Supabase URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
+console.log("Institution ID:", getInstitutionId());
+  async function createRequest() {
+    const institutionId = getInstitutionId();
 
-  function createRequest() {
+    if (!institutionId) {
+      setMessage("Missing institution ID. Check .env.local.");
+      return;
+    }
+
     if (!form.requestTitle.trim() || !form.question.trim()) {
       setMessage("Please add a request title and clarification question.");
       return;
     }
 
-    const currentRole = getCurrentRole();
+    const { data, error } = await supabase
+      .from("clarification_requests")
+      .insert({
+        institution_id: institutionId,
+        request_title: form.requestTitle,
+        loan_account: form.loanAccount || "N/A",
+        member_name: form.memberName || "N/A",
+        issue_type: form.issueType,
+        question: form.question,
+        requested_by_role: currentRole,
+        assigned_to: form.assignedTo || "Management",
+        status: "Pending Management Response",
+        management_response: "",
+        board_review_notes: "",
+      })
+      .select()
+      .single();
 
-    const newRequest: ClarificationRequest = {
-      id: `clarification-${Date.now()}-${Math.random()
-        .toString(16)
-        .slice(2)}`,
-      createdAt: new Date().toISOString(),
-      respondedAt: "",
-      reviewedAt: "",
-      requestTitle: form.requestTitle,
-      loanAccount: form.loanAccount || "N/A",
-      memberName: form.memberName || "N/A",
-      issueType: form.issueType,
-      question: form.question,
-      requestedByRole: currentRole,
-      assignedTo: form.assignedTo || "Management",
-      status: "Pending Management Response",
-      managementResponse: "",
-      boardReviewNotes: "",
-    };
+    if (error) {
+      setMessage(`Failed to create request: ${error.message}`);
+      return;
+    }
 
-    const updatedRequests = [newRequest, ...requests];
+    const newRequest = data as ClarificationRequest;
 
-    setRequests(updatedRequests);
-    saveRequests(updatedRequests);
+    setRequests((previous) => [newRequest, ...previous]);
     setSelectedRequestId(newRequest.id);
     setForm(emptyForm);
-    setMessage("Clarification request created and audit history recorded.");
+    setMessage("Clarification request saved to Supabase.");
 
-    createAuditLog({
+    await createAuditLog({
       actionType: "CLARIFICATION_REQUEST_CREATED",
-      recordRef: `${newRequest.loanAccount} - ${newRequest.requestTitle}`,
+      recordRef: `${newRequest.loan_account} - ${newRequest.request_title}`,
       oldValue: "No clarification request",
       newValue: "Pending Management Response",
       note: `Clarification request created by ${currentRole}.`,
     });
   }
 
-  function updateManagementResponse(requestId: string, response: string) {
+  async function updateManagementResponse(requestId: string, response: string) {
     const target = requests.find((request) => request.id === requestId);
     if (!target) return;
 
-    const oldStatus = target.status;
     const nextStatus: ClarificationStatus = response.trim()
       ? "Under Board Review"
       : "Pending Management Response";
 
-    const updatedRequests = requests.map((request) =>
-      request.id === requestId
-        ? {
-            ...request,
-            managementResponse: response,
-            respondedAt: response.trim() ? new Date().toISOString() : "",
-            status: nextStatus,
-          }
-        : request
+    const respondedAt = response.trim() ? new Date().toISOString() : null;
+
+    const { data, error } = await supabase
+      .from("clarification_requests")
+      .update({
+        management_response: response,
+        responded_at: respondedAt,
+        status: nextStatus,
+      })
+      .eq("id", requestId)
+      .select()
+      .single();
+
+    if (error) {
+      setMessage(`Failed to save management response: ${error.message}`);
+      return;
+    }
+
+    const updatedRequest = data as ClarificationRequest;
+
+    setRequests((previous) =>
+      previous.map((request) =>
+        request.id === requestId ? updatedRequest : request
+      )
     );
 
-    setRequests(updatedRequests);
-    saveRequests(updatedRequests);
     setMessage(
-      "Management response saved. The matter is now awaiting board review."
+      "Management response saved to Supabase. Matter is awaiting board review."
     );
 
-    createAuditLog({
+    await createAuditLog({
       actionType: "MANAGEMENT_RESPONSE_SUBMITTED",
-      recordRef: `${target.loanAccount} - ${target.requestTitle}`,
-      oldValue: target.managementResponse || "Blank",
+      recordRef: `${target.loan_account} - ${target.request_title}`,
+      oldValue: target.management_response || "Blank",
       newValue: response || "Blank",
-      note: `Management response submitted. Status moved from ${oldStatus} to ${nextStatus}.`,
+      note: `Management response submitted. Status moved from ${target.status} to ${nextStatus}.`,
     });
   }
 
-  function updateBoardReviewNotes(requestId: string, notes: string) {
+  async function updateBoardReviewNotes(requestId: string, notes: string) {
     const target = requests.find((request) => request.id === requestId);
     if (!target) return;
 
-    const updatedRequests = requests.map((request) =>
-      request.id === requestId
-        ? {
-            ...request,
-            boardReviewNotes: notes,
-          }
-        : request
+    const { data, error } = await supabase
+      .from("clarification_requests")
+      .update({
+        board_review_notes: notes,
+      })
+      .eq("id", requestId)
+      .select()
+      .single();
+
+    if (error) {
+      setMessage(`Failed to save board review notes: ${error.message}`);
+      return;
+    }
+
+    const updatedRequest = data as ClarificationRequest;
+
+    setRequests((previous) =>
+      previous.map((request) =>
+        request.id === requestId ? updatedRequest : request
+      )
     );
 
-    setRequests(updatedRequests);
-    saveRequests(updatedRequests);
-    setMessage("Board review notes saved and audit history recorded.");
+    setMessage("Board review notes saved to Supabase.");
 
-    createAuditLog({
+    await createAuditLog({
       actionType: "BOARD_REVIEW_NOTES_UPDATED",
-      recordRef: `${target.loanAccount} - ${target.requestTitle}`,
-      oldValue: target.boardReviewNotes || "Blank",
+      recordRef: `${target.loan_account} - ${target.request_title}`,
+      oldValue: target.board_review_notes || "Blank",
       newValue: notes || "Blank",
       note: "Board review notes were updated.",
     });
   }
 
-  function applyBoardDecision(
+  async function applyBoardDecision(
     requestId: string,
     decisionStatus: ClarificationStatus
   ) {
     const target = requests.find((request) => request.id === requestId);
     if (!target) return;
 
-    const updatedRequests = requests.map((request) =>
-      request.id === requestId
-        ? {
-            ...request,
-            status: decisionStatus,
-            reviewedAt: new Date().toISOString(),
-          }
-        : request
+    const reviewedAt = new Date().toISOString();
+
+    const { data, error } = await supabase
+      .from("clarification_requests")
+      .update({
+        status: decisionStatus,
+        reviewed_at: reviewedAt,
+      })
+      .eq("id", requestId)
+      .select()
+      .single();
+
+    if (error) {
+      setMessage(`Failed to save board decision: ${error.message}`);
+      return;
+    }
+
+    const updatedRequest = data as ClarificationRequest;
+
+    setRequests((previous) =>
+      previous.map((request) =>
+        request.id === requestId ? updatedRequest : request
+      )
     );
 
-    setRequests(updatedRequests);
-    saveRequests(updatedRequests);
-    setMessage(`Board decision saved: ${decisionStatus}.`);
+    setMessage(`Board decision saved to Supabase: ${decisionStatus}.`);
 
-    createAuditLog({
+    await createAuditLog({
       actionType: "BOARD_REVIEW_DECISION_RECORDED",
-      recordRef: `${target.loanAccount} - ${target.requestTitle}`,
+      recordRef: `${target.loan_account} - ${target.request_title}`,
       oldValue: target.status,
       newValue: decisionStatus,
       note: `Board review decision recorded as ${decisionStatus}.`,
@@ -382,7 +405,8 @@ export default function ClarificationRequestsPage() {
 
           <p style={styles.subtitle}>
             A controlled governance workspace where board questions, management
-            responses, review decisions and audit history stay connected.
+            responses, review decisions and audit history are now saved in
+            Supabase.
           </p>
         </div>
 
@@ -494,7 +518,7 @@ export default function ClarificationRequestsPage() {
             style={styles.textarea}
             value={form.question}
             onChange={(event) => updateForm("question", event.target.value)}
-            placeholder="Example: Why has this action remained unresolved past the due date, and what is the recovery plan?"
+            placeholder="Example: Why has this action remained unresolved past the due date?"
           />
         </label>
 
@@ -529,7 +553,9 @@ export default function ClarificationRequestsPage() {
             </label>
           </div>
 
-          {filteredRequests.length === 0 ? (
+          {loading ? (
+            <p style={styles.empty}>Loading Supabase requests...</p>
+          ) : filteredRequests.length === 0 ? (
             <p style={styles.empty}>No clarification requests found yet.</p>
           ) : (
             <div style={styles.requestList}>
@@ -557,15 +583,15 @@ export default function ClarificationRequestsPage() {
                     </span>
 
                     <span style={styles.requestButtonTitle}>
-                      {request.requestTitle}
+                      {request.request_title}
                     </span>
 
                     <span style={styles.requestButtonMeta}>
-                      {request.issueType} · {request.assignedTo}
+                      {request.issue_type} · {request.assigned_to}
                     </span>
 
                     <span style={styles.requestButtonMeta}>
-                      {request.loanAccount} · {request.memberName}
+                      {request.loan_account} · {request.member_name}
                     </span>
                   </button>
                 );
@@ -597,44 +623,44 @@ export default function ClarificationRequestsPage() {
                   </span>
 
                   <h2 style={styles.detailTitle}>
-                    {selectedRequest.requestTitle}
+                    {selectedRequest.request_title}
                   </h2>
 
                   <p style={styles.detailMeta}>
-                    Issue Type: <strong>{selectedRequest.issueType}</strong>
+                    Issue Type: <strong>{selectedRequest.issue_type}</strong>
                   </p>
 
                   <p style={styles.detailMeta}>
-                    Loan Account: <strong>{selectedRequest.loanAccount}</strong>{" "}
-                    · Member: <strong>{selectedRequest.memberName}</strong>
+                    Loan Account: <strong>{selectedRequest.loan_account}</strong>{" "}
+                    · Member: <strong>{selectedRequest.member_name}</strong>
                   </p>
 
                   <p style={styles.detailMeta}>
                     Requested by:{" "}
-                    <strong>{selectedRequest.requestedByRole}</strong> ·
-                    Assigned to: <strong>{selectedRequest.assignedTo}</strong>
+                    <strong>{selectedRequest.requested_by_role}</strong> ·
+                    Assigned to: <strong>{selectedRequest.assigned_to}</strong>
                   </p>
                 </div>
 
                 <div style={styles.datePanel}>
-                  <p>Requested: {formatDate(selectedRequest.createdAt)}</p>
-                  <p>Responded: {formatDate(selectedRequest.respondedAt)}</p>
-                  <p>Reviewed: {formatDate(selectedRequest.reviewedAt)}</p>
+                  <p>Requested: {formatDate(selectedRequest.created_at)}</p>
+                  <p>Responded: {formatDate(selectedRequest.responded_at)}</p>
+                  <p>Reviewed: {formatDate(selectedRequest.reviewed_at)}</p>
                 </div>
               </div>
 
               <div style={styles.timeline}>
                 <TimelineStep
                   label="Request Raised"
-                  active={Boolean(selectedRequest.createdAt)}
+                  active={Boolean(selectedRequest.created_at)}
                 />
                 <TimelineStep
                   label="Management Response"
-                  active={Boolean(selectedRequest.respondedAt)}
+                  active={Boolean(selectedRequest.responded_at)}
                 />
                 <TimelineStep
                   label="Board Review"
-                  active={Boolean(selectedRequest.reviewedAt)}
+                  active={Boolean(selectedRequest.reviewed_at)}
                 />
                 <TimelineStep
                   label="Final Decision"
@@ -656,7 +682,7 @@ export default function ClarificationRequestsPage() {
                   Management Response
                   <textarea
                     style={styles.responseTextarea}
-                    value={selectedRequest.managementResponse}
+                    value={selectedRequest.management_response || ""}
                     onChange={(event) =>
                       updateManagementResponse(
                         selectedRequest.id,
@@ -671,7 +697,7 @@ export default function ClarificationRequestsPage() {
                   Board Review Notes
                   <textarea
                     style={styles.responseTextarea}
-                    value={selectedRequest.boardReviewNotes}
+                    value={selectedRequest.board_review_notes || ""}
                     onChange={(event) =>
                       updateBoardReviewNotes(
                         selectedRequest.id,
@@ -743,13 +769,12 @@ export default function ClarificationRequestsPage() {
       </section>
 
       <section style={styles.warningBox}>
-        <h2 style={styles.sectionTitle}>Governance Logic</h2>
+        <h2 style={styles.sectionTitle}>Supabase Governance Layer Active</h2>
 
         <p style={styles.helper}>
-          Responded is not the end. A management response should go back to the
-          board or CEO for review. The board can then close the matter, request
-          further clarification, escalate it, or convert it into a formal
-          management action. Every step is preserved in Audit History.
+          Clarification requests are now stored in Supabase instead of browser
+          localStorage. This is the first step toward real user accounts, role
+          access, notifications, email alerts and protected audit history.
         </p>
       </section>
     </main>
@@ -790,7 +815,6 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "48px",
     fontFamily: "Manrope, sans-serif",
   },
-
   header: {
     maxWidth: "1280px",
     margin: "0 auto 32px",
@@ -800,7 +824,6 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "flex-end",
     flexWrap: "wrap",
   },
-
   kicker: {
     color: "#d6a84f",
     fontSize: "13px",
@@ -809,29 +832,24 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: "12px",
     fontWeight: 900,
   },
-
   title: {
     fontSize: "46px",
     margin: "0 0 12px",
     letterSpacing: "-0.04em",
   },
-
   subtitle: {
     color: "#b7bdc8",
     fontSize: "17px",
     lineHeight: 1.6,
     maxWidth: "820px",
   },
-
   headerPanel: {
     background: "rgba(16, 22, 33, 0.86)",
     border: "1px solid rgba(214,168,79,0.28)",
     borderRadius: "22px",
     padding: "20px",
     width: "320px",
-    boxShadow: "0 22px 70px rgba(0,0,0,0.28)",
   },
-
   headerPanelLabel: {
     color: "#d6a84f",
     fontSize: "12px",
@@ -840,20 +858,17 @@ const styles: Record<string, React.CSSProperties> = {
     margin: "0 0 8px",
     fontWeight: 900,
   },
-
   headerPanelValue: {
     color: "#fff",
     fontSize: "22px",
     margin: "0 0 8px",
   },
-
   headerPanelText: {
     color: "#b7bdc8",
     lineHeight: 1.5,
     margin: 0,
     fontSize: "14px",
   },
-
   metricsGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
@@ -861,15 +876,12 @@ const styles: Record<string, React.CSSProperties> = {
     margin: "0 auto 24px",
     maxWidth: "1280px",
   },
-
   metricCard: {
     background: "rgba(16, 22, 33, 0.82)",
     border: "1px solid rgba(214,168,79,0.2)",
     borderRadius: "18px",
     padding: "20px",
-    boxShadow: "0 18px 55px rgba(0,0,0,0.22)",
   },
-
   metricLabel: {
     color: "#b7bdc8",
     fontSize: "12px",
@@ -878,13 +890,11 @@ const styles: Record<string, React.CSSProperties> = {
     margin: "0 0 10px",
     fontWeight: 800,
   },
-
   metricValue: {
     color: "#fff",
     fontSize: "34px",
     margin: 0,
   },
-
   createCard: {
     maxWidth: "1280px",
     margin: "0 auto 24px",
@@ -892,9 +902,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid rgba(214,168,79,0.22)",
     borderRadius: "24px",
     padding: "26px",
-    boxShadow: "0 22px 80px rgba(0,0,0,0.26)",
   },
-
   createHeader: {
     display: "flex",
     justifyContent: "space-between",
@@ -903,33 +911,28 @@ const styles: Record<string, React.CSSProperties> = {
     flexWrap: "wrap",
     marginBottom: "18px",
   },
-
   sectionTitle: {
     margin: "0 0 8px",
     fontSize: "22px",
     color: "#fff",
   },
-
   helper: {
     color: "#b7bdc8",
     lineHeight: 1.6,
     margin: 0,
   },
-
   helperSmall: {
     color: "#9ca6b8",
     lineHeight: 1.5,
     margin: 0,
     fontSize: "13px",
   },
-
   formGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
     gap: "16px",
     marginBottom: "16px",
   },
-
   label: {
     display: "flex",
     flexDirection: "column",
@@ -938,7 +941,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "13px",
     fontWeight: 800,
   },
-
   input: {
     background: "rgba(5, 7, 13, 0.9)",
     color: "#fff",
@@ -948,7 +950,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "14px",
     outline: "none",
   },
-
   textarea: {
     background: "rgba(5, 7, 13, 0.9)",
     color: "#fff",
@@ -960,7 +961,6 @@ const styles: Record<string, React.CSSProperties> = {
     resize: "vertical",
     outline: "none",
   },
-
   responseTextarea: {
     background: "rgba(5, 7, 13, 0.9)",
     color: "#fff",
@@ -972,7 +972,6 @@ const styles: Record<string, React.CSSProperties> = {
     resize: "vertical",
     outline: "none",
   },
-
   primaryButton: {
     background: "#d6a84f",
     color: "#080b12",
@@ -981,15 +980,12 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "13px 20px",
     fontWeight: 900,
     cursor: "pointer",
-    boxShadow: "0 18px 45px rgba(214,168,79,0.2)",
   },
-
   message: {
     color: "#7ee787",
     marginTop: "16px",
     fontWeight: 800,
   },
-
   workspace: {
     maxWidth: "1280px",
     margin: "0 auto 24px",
@@ -998,24 +994,20 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "22px",
     alignItems: "start",
   },
-
   registerPanel: {
     background: "rgba(16, 22, 33, 0.82)",
     border: "1px solid rgba(214,168,79,0.22)",
     borderRadius: "24px",
     padding: "22px",
-    boxShadow: "0 22px 80px rgba(0,0,0,0.26)",
     position: "sticky",
     top: "24px",
   },
-
   panelHeader: {
     display: "flex",
     flexDirection: "column",
     gap: "16px",
     marginBottom: "18px",
   },
-
   filterLabel: {
     display: "flex",
     flexDirection: "column",
@@ -1024,7 +1016,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "13px",
     fontWeight: 800,
   },
-
   smallSelect: {
     background: "rgba(5, 7, 13, 0.9)",
     color: "#fff",
@@ -1034,12 +1025,10 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "13px",
     outline: "none",
   },
-
   requestList: {
     display: "grid",
     gap: "12px",
   },
-
   requestButton: {
     textAlign: "left",
     width: "100%",
@@ -1052,17 +1041,14 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     gap: "8px",
   },
-
   requestButtonActive: {
     border: "1px solid rgba(214,168,79,0.7)",
     background: "rgba(214,168,79,0.08)",
   },
-
   requestButtonTop: {
     display: "flex",
     justifyContent: "space-between",
   },
-
   statusBadge: {
     display: "inline-flex",
     alignSelf: "flex-start",
@@ -1073,34 +1059,28 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: "0.06em",
     textTransform: "uppercase",
   },
-
   requestButtonTitle: {
     color: "#fff",
     fontSize: "15px",
     fontWeight: 900,
     lineHeight: 1.35,
   },
-
   requestButtonMeta: {
     color: "#9ca6b8",
     fontSize: "12px",
     lineHeight: 1.35,
   },
-
   detailPanel: {
     background: "rgba(16, 22, 33, 0.82)",
     border: "1px solid rgba(214,168,79,0.22)",
     borderRadius: "24px",
     padding: "26px",
-    boxShadow: "0 22px 80px rgba(0,0,0,0.26)",
     minHeight: "520px",
   },
-
   noSelection: {
     padding: "60px 20px",
     textAlign: "center",
   },
-
   detailHeader: {
     display: "flex",
     justifyContent: "space-between",
@@ -1108,20 +1088,17 @@ const styles: Record<string, React.CSSProperties> = {
     flexWrap: "wrap",
     marginBottom: "22px",
   },
-
   detailTitle: {
     color: "#fff",
     fontSize: "30px",
     letterSpacing: "-0.03em",
     margin: "14px 0 10px",
   },
-
   detailMeta: {
     color: "#b7bdc8",
     fontSize: "14px",
     margin: "6px 0",
   },
-
   datePanel: {
     background: "rgba(5, 7, 13, 0.7)",
     border: "1px solid #273244",
@@ -1132,14 +1109,12 @@ const styles: Record<string, React.CSSProperties> = {
     minWidth: "260px",
     lineHeight: 1.6,
   },
-
   timeline: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
     gap: "12px",
     marginBottom: "22px",
   },
-
   timelineStep: {
     background: "rgba(5, 7, 13, 0.54)",
     border: "1px solid #273244",
@@ -1149,31 +1124,26 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: "9px",
   },
-
   timelineDot: {
     width: "10px",
     height: "10px",
     borderRadius: "50%",
     background: "#4b5563",
   },
-
   timelineDotActive: {
     background: "#d6a84f",
     boxShadow: "0 0 0 4px rgba(214,168,79,0.12)",
   },
-
   timelineText: {
     color: "#8b95a8",
     fontSize: "12px",
     fontWeight: 800,
   },
-
   timelineTextActive: {
     color: "#f5f0e6",
     fontSize: "12px",
     fontWeight: 900,
   },
-
   infoBox: {
     background: "rgba(214,168,79,0.08)",
     border: "1px solid rgba(214,168,79,0.24)",
@@ -1181,7 +1151,6 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "18px",
     marginBottom: "22px",
   },
-
   infoLabel: {
     color: "#d6a84f",
     fontSize: "12px",
@@ -1190,40 +1159,34 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 900,
     margin: "0 0 8px",
   },
-
   infoText: {
     color: "#f5f0e6",
     lineHeight: 1.6,
     margin: 0,
   },
-
   splitGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
     gap: "18px",
     marginBottom: "22px",
   },
-
   decisionPanel: {
     background: "rgba(5, 7, 13, 0.58)",
     border: "1px solid rgba(214,168,79,0.24)",
     borderRadius: "18px",
     padding: "20px",
   },
-
   decisionTitle: {
     color: "#fff",
     margin: "0 0 8px",
     fontSize: "18px",
   },
-
   decisionRow: {
     display: "flex",
     flexWrap: "wrap",
     gap: "10px",
     marginTop: "16px",
   },
-
   smallButton: {
     background: "#d6a84f",
     color: "#080b12",
@@ -1234,7 +1197,6 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
     fontSize: "13px",
   },
-
   smallButtonDanger: {
     background: "#ef4444",
     color: "#fff",
@@ -1245,7 +1207,6 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
     fontSize: "13px",
   },
-
   smallButtonOutline: {
     background: "transparent",
     color: "#f5f0e6",
@@ -1256,12 +1217,10 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
     fontSize: "13px",
   },
-
   empty: {
     color: "#b7bdc8",
     padding: "16px 0",
   },
-
   warningBox: {
     maxWidth: "1280px",
     margin: "0 auto",
