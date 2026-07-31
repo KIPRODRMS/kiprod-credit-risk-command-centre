@@ -1,794 +1,772 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { supabase } from "@/lib/supabaseClient";
 
-type PortfolioRow = {
-  member_name?: string;
-  memberName?: string;
-  member?: string;
+type RiskStatus = "Green" | "Amber" | "Red" | "NPL";
+
+type LoanRecord = {
+  member_name: string;
   member_number?: string;
-  loan_account?: string;
-  loanAccount?: string;
-  loan_product?: string;
+  loan_account: string;
   branch?: string;
-  employer?: string;
-  sector?: string;
-  loan_amount?: string | number;
-  outstanding_balance?: string | number;
-  arrears_amount?: string | number;
-  arrearsAmount?: string | number;
-  days_in_arrears?: string | number;
-  daysInArrears?: string | number;
-  repayment_status?: string;
+  outstanding_balance: number;
+  arrears_amount?: number;
+  days_in_arrears?: number;
   responsible_officer?: string;
-  responsibleOfficer?: string;
-  assignedOfficer?: string;
-  assignedTo?: string;
   restructured?: string;
-  risk_status?: string;
-  riskStatus?: string;
-  risk?: string;
+  risk_status: RiskStatus;
+  risk_flags?: string[];
 };
 
 type ActionItem = {
-  loan_account?: string;
-  loanAccount?: string;
-  member_name?: string;
-  memberName?: string;
-  member?: string;
-  risk?: string;
-  responsible_officer?: string;
-  responsibleOfficer?: string;
-  assignedOfficer?: string;
-  assignedTo?: string;
-  due_date?: string;
-  dueDate?: string;
-  status?: string;
-  notes?: string;
-  actionRequired?: string;
+  action_id: string;
+  loan_account: string;
+  member_name: string;
+  risk_status: RiskStatus;
+  risk_source: string;
+  action_required: string;
+  assigned_to: string;
+  due_date: string;
+  status: string;
+  escalation_level: string;
+  board_visible: boolean;
+  notes: string;
+  last_updated: string;
 };
 
-type InstitutionProfile = {
-  institutionName?: string;
-  institutionType?: string;
-  reportingMonth?: string;
+type ClarificationRequest = {
+  id: string;
+  loan_account: string | null;
+  member_name: string | null;
+  question: string;
+  assigned_to: string | null;
+  status: string;
+  management_response: string | null;
+  created_at: string;
 };
 
-function toNumber(value: string | number | undefined): number {
-  if (value === undefined || value === null) return 0;
-  const cleaned = String(value).replace(/,/g, "").trim();
-  const parsed = Number(cleaned);
-  return Number.isFinite(parsed) ? parsed : 0;
+type AuditLog = {
+  id: string;
+  createdAt: string;
+  module: string;
+  actionType: string;
+  recordRef: string;
+  oldValue: string;
+  newValue: string;
+  role: string;
+  user: string;
+  note: string;
+};
+
+type BoardIssue = {
+  issueId: string;
+  riskSource: string;
+  memberName: string;
+  loanAccount: string;
+  riskClass: RiskStatus;
+  exposure: number;
+  issue: string;
+  managementOwner: string;
+  dueDate: string;
+  daysOverdue: number;
+  escalationLevel: string;
+  clarificationStatus: string;
+  latestNote: string;
+  visibilityReasons: string[];
+};
+
+type BoardNote = {
+  issueId: string;
+  note: string;
+  updatedAt: string;
+};
+
+const CLOSED_STATUSES = ["closed", "completed", "done"];
+
+function subscribeToHydration() {
+  return () => {};
 }
 
-function readObject<T>(key: string): T | null {
-  const raw = localStorage.getItem(key);
-  if (!raw) return null;
+function isClosed(action: ActionItem) {
+  return CLOSED_STATUSES.includes(String(action.status || "").toLowerCase());
+}
 
+function daysOverdue(dateValue: string) {
+  if (!dateValue) return 0;
+  const due = new Date(`${dateValue}T23:59:59`);
+  if (Number.isNaN(due.getTime()) || due.getTime() >= Date.now()) return 0;
+  return Math.ceil((Date.now() - due.getTime()) / 86_400_000);
+}
+
+function formatMoney(value: number, currency: string) {
+  return `${currency} ${Number(value || 0).toLocaleString("en-KE", {
+    maximumFractionDigits: 0,
+  })}`;
+}
+
+function readStored<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
   try {
-    return JSON.parse(raw);
+    return JSON.parse(localStorage.getItem(key) || "") as T;
   } catch {
-    return null;
+    return fallback;
   }
 }
 
-function getAllLocalStorageArrays(): { key: string; value: any[] }[] {
-  const results: { key: string; value: any[] }[] = [];
-
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (!key) continue;
-
-    const raw = localStorage.getItem(key);
-    if (!raw) continue;
-
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        results.push({ key, value: parsed });
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  return results;
+function appendAudit(
+  actionType: string,
+  issue: BoardIssue,
+  note: string,
+  newValue: string
+) {
+  const logs = readStored<AuditLog[]>("kiprodAuditLogs", []);
+  const role = localStorage.getItem("kiprodCurrentRole") || "Board User";
+  const log: AuditLog = {
+    id: `audit-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    createdAt: new Date().toISOString(),
+    module: "Board Oversight",
+    actionType,
+    recordRef: `${issue.issueId} - ${issue.loanAccount}`,
+    oldValue: "",
+    newValue,
+    role,
+    user: role,
+    note,
+  };
+  localStorage.setItem("kiprodAuditLogs", JSON.stringify([log, ...logs]));
 }
 
-function looksLikePortfolioArray(items: any[]): boolean {
-  if (!items.length) return false;
-
-  const sample = items[0];
-
-  return Boolean(
-    sample.loan_account ||
-      sample.loanAccount ||
-      sample.days_in_arrears ||
-      sample.daysInArrears ||
-      sample.outstanding_balance ||
-      sample.arrears_amount ||
-      sample.arrearsAmount
-  );
-}
-
-function looksLikeActionArray(items: any[]): boolean {
-  if (!items.length) return false;
-
-  const sample = items[0];
-
-  return Boolean(
-    sample.actionRequired ||
-      sample.dueDate ||
-      sample.due_date ||
-      sample.assignedTo ||
-      sample.assignedOfficer ||
-      sample.status ||
-      sample.notes
-  );
-}
-
-function findPortfolioData(): PortfolioRow[] {
-  const preferredKeys = [
-    "kiprodPortfolioData",
-    "portfolioData",
-    "uploadedPortfolioData",
-    "portfolioRows",
-    "creditPortfolioData",
-  ];
-
-  for (const key of preferredKeys) {
-    const data = readObject<PortfolioRow[]>(key);
-    if (Array.isArray(data) && data.length) return data;
-  }
-
-  const arrays = getAllLocalStorageArrays();
-  const match = arrays.find((item) => looksLikePortfolioArray(item.value));
-
-  return match ? match.value : [];
-}
-
-function findActionData(): ActionItem[] {
-  const preferredKeys = [
-    "kiprodExecutionActions",
-    "executionTrackerActions",
-    "actionItems",
-    "actionTrackerItems",
-    "actions",
-    "trackerActions",
-    "creditRiskActions",
-  ];
-
-  for (const key of preferredKeys) {
-    const data = readObject<ActionItem[]>(key);
-    if (Array.isArray(data) && data.length) return data;
-  }
-
-  const arrays = getAllLocalStorageArrays();
-  const match = arrays.find((item) => looksLikeActionArray(item.value));
-
-  return match ? match.value : [];
-}
-
-function getRiskStatus(row: PortfolioRow | ActionItem): string {
-  const explicitStatus =
-    (row as PortfolioRow).risk_status ||
-    (row as PortfolioRow).riskStatus ||
-    row.risk;
-
-  if (explicitStatus) return String(explicitStatus);
-
-  const days = toNumber(
-    (row as PortfolioRow).days_in_arrears || (row as PortfolioRow).daysInArrears
-  );
-
-  if (days === 0) return "Green";
-  if (days >= 1 && days <= 30) return "Amber";
-  if (days >= 31 && days <= 90) return "Red";
-  return "NPL";
-}
-
-function isRisky(row: PortfolioRow): boolean {
-  return getRiskStatus(row) !== "Green";
-}
-
-function isNpl(row: PortfolioRow | ActionItem): boolean {
-  return getRiskStatus(row) === "NPL";
-}
-
-function getMemberName(row: PortfolioRow | ActionItem): string {
-  return (
-    row.member_name ||
-    row.memberName ||
-    row.member ||
-    "N/A"
-  );
-}
-
-function getLoanAccount(row: PortfolioRow | ActionItem): string {
-  return (
-    row.loan_account ||
-    row.loanAccount ||
-    "N/A"
-  );
-}
-
-function getOfficer(row: PortfolioRow | ActionItem): string {
-  return (
-    row.responsible_officer ||
-    row.responsibleOfficer ||
-    row.assignedOfficer ||
-    row.assignedTo ||
-    "Unassigned"
-  );
-}
-
-function getArrearsAmount(row: PortfolioRow): number {
-  return toNumber(row.arrears_amount || row.arrearsAmount);
-}
-
-function isActionClosed(action: ActionItem): boolean {
-  const status = String(action.status || "").toLowerCase();
-
-  return (
-    status.includes("complete") ||
-    status.includes("completed") ||
-    status.includes("closed") ||
-    status.includes("done")
-  );
-}
-
-function isActionOverdue(action: ActionItem): boolean {
-  const dueValue = action.due_date || action.dueDate;
-  if (!dueValue || isActionClosed(action)) return false;
-
-  const dueDate = new Date(dueValue);
-  const today = new Date();
-
-  dueDate.setHours(0, 0, 0, 0);
-  today.setHours(0, 0, 0, 0);
-
-  return dueDate < today;
-}
-
-function isEscalated(action: ActionItem): boolean {
-  const status = String(action.status || "").toLowerCase();
-  const notes = String(action.notes || "").toLowerCase();
-  const actionRequired = String(action.actionRequired || "").toLowerCase();
-
-  return (
-    status.includes("escalated") ||
-    status.includes("critical") ||
-    notes.includes("escalated") ||
-    notes.includes("board") ||
-    actionRequired.includes("escalate") ||
-    actionRequired.includes("board")
-  );
-}
-
-export default function BoardOversightPage() {
-  const [portfolio, setPortfolio] = useState<PortfolioRow[]>([]);
-  const [actions, setActions] = useState<ActionItem[]>([]);
-  const [profile, setProfile] = useState<InstitutionProfile | null>(null);
-  const [currentRole, setCurrentRole] = useState("Not selected");
-
-  useEffect(() => {
-    setPortfolio(findPortfolioData());
-    setActions(findActionData());
-    setProfile(readObject<InstitutionProfile>("kiprodInstitutionProfile"));
-
-    const role = localStorage.getItem("kiprodCurrentRole");
-    if (role) setCurrentRole(role);
-  }, []);
-
-  const oversight = useMemo(() => {
-    const riskyAccounts = portfolio.filter(isRisky);
-    const nplAccounts = portfolio.filter(isNpl);
-
-    const unassignedRiskyAccounts = riskyAccounts.filter(
-      (row) => getOfficer(row) === "Unassigned"
-    );
-
-    const overdueActions = actions.filter(isActionOverdue);
-    const escalatedActions = actions.filter(isEscalated);
-
-    const boardAttentionItems = [
-      ...unassignedRiskyAccounts.map((row) => ({
-        type: "Unassigned Risk",
-        account: getLoanAccount(row),
-        member: getMemberName(row),
-        officer: getOfficer(row),
-        issue: `${getRiskStatus(row)} account has no responsible officer.`,
-      })),
-
-      ...overdueActions.map((action) => ({
-        type: "Overdue Action",
-        account: getLoanAccount(action),
-        member: getMemberName(action),
-        officer: getOfficer(action),
-        issue: "Management action is overdue.",
-      })),
-
-      ...escalatedActions.map((action) => ({
-        type: "Escalated Action",
-        account: getLoanAccount(action),
-        member: getMemberName(action),
-        officer: getOfficer(action),
-        issue: "Action has been escalated and requires oversight visibility.",
-      })),
-
-      ...nplAccounts.slice(0, 10).map((row) => ({
-        type: "NPL Exposure",
-        account: getLoanAccount(row),
-        member: getMemberName(row),
-        officer: getOfficer(row),
-        issue: "Account is in NPL status and requires board-level visibility.",
-      })),
-    ];
-
-    const accountabilityMap = new Map<
-      string,
-      {
-        officer: string;
-        riskyCount: number;
-        nplCount: number;
-        arrearsAmount: number;
-        overdueActions: number;
-        escalatedActions: number;
-      }
-    >();
-
-    riskyAccounts.forEach((row) => {
-      const officer = getOfficer(row);
-
-      if (!accountabilityMap.has(officer)) {
-        accountabilityMap.set(officer, {
-          officer,
-          riskyCount: 0,
-          nplCount: 0,
-          arrearsAmount: 0,
-          overdueActions: 0,
-          escalatedActions: 0,
-        });
-      }
-
-      const record = accountabilityMap.get(officer)!;
-      record.riskyCount += 1;
-      record.arrearsAmount += getArrearsAmount(row);
-      if (isNpl(row)) record.nplCount += 1;
-    });
-
-    overdueActions.forEach((action) => {
-      const officer = getOfficer(action);
-
-      if (!accountabilityMap.has(officer)) {
-        accountabilityMap.set(officer, {
-          officer,
-          riskyCount: 0,
-          nplCount: 0,
-          arrearsAmount: 0,
-          overdueActions: 0,
-          escalatedActions: 0,
-        });
-      }
-
-      const record = accountabilityMap.get(officer)!;
-      record.overdueActions += 1;
-    });
-
-    escalatedActions.forEach((action) => {
-      const officer = getOfficer(action);
-
-      if (!accountabilityMap.has(officer)) {
-        accountabilityMap.set(officer, {
-          officer,
-          riskyCount: 0,
-          nplCount: 0,
-          arrearsAmount: 0,
-          overdueActions: 0,
-          escalatedActions: 0,
-        });
-      }
-
-      const record = accountabilityMap.get(officer)!;
-      record.escalatedActions += 1;
-    });
-
-    const accountabilitySummary = Array.from(accountabilityMap.values()).sort(
-      (a, b) =>
-        b.nplCount - a.nplCount ||
-        b.escalatedActions - a.escalatedActions ||
-        b.overdueActions - a.overdueActions ||
-        b.riskyCount - a.riskyCount
-    );
-
-    return {
-      riskyAccounts,
-      nplAccounts,
-      unassignedRiskyAccounts,
-      overdueActions,
-      escalatedActions,
-      boardAttentionItems,
-      accountabilitySummary,
-    };
-  }, [portfolio, actions]);
-
-  return (
-    <main style={styles.page}>
-      <section style={styles.header}>
-        <p style={styles.kicker}>Board Oversight Layer</p>
-
-        <h1 style={styles.title}>Board Oversight & Accountability</h1>
-
-        <p style={styles.subtitle}>
-          View unresolved credit risk, overdue management actions, NPL exposure,
-          escalation items, and accountability gaps without giving the board
-          operational edit rights.
-        </p>
-        <div style={styles.actions}>
-  <a style={styles.primaryButton} href="/clarification-requests">
-    Open Clarification Requests
-  </a>
-
-  <a style={styles.secondaryButton} href="/audit-history">
-    View Audit History
-  </a>
-</div>
-<div style={styles.actions}>
-  <a style={styles.primaryButton} href="/clarification-requests">
-    Open Clarification Requests
-  </a>
-
-  <a style={styles.secondaryButton} href="/audit-history">
-    View Audit History
-  </a>
-</div>
-        <div style={styles.contextBox}>
-          <span>
-            Institution:{" "}
-            <strong>{profile?.institutionName || "Not configured"}</strong>
-          </span>
-
-          <span>
-            Reporting Month:{" "}
-            <strong>{profile?.reportingMonth || "Not configured"}</strong>
-          </span>
-
-          <span>
-            Current Role: <strong>{currentRole}</strong>
-          </span>
-        </div>
-      </section>
-
-      <section style={styles.metricsGrid}>
-        <MetricCard
-          label="Total Risky Accounts"
-          value={oversight.riskyAccounts.length}
-          note="Amber, Red and NPL accounts"
-        />
-
-        <MetricCard
-          label="Unassigned Risky Accounts"
-          value={oversight.unassignedRiskyAccounts.length}
-          note="Risk exists but ownership is missing"
-        />
-
-        <MetricCard
-          label="Overdue Actions"
-          value={oversight.overdueActions.length}
-          note="Management follow-ups past due date"
-        />
-
-        <MetricCard
-          label="Escalated Actions"
-          value={oversight.escalatedActions.length}
-          note="Items marked escalated or critical"
-        />
-
-        <MetricCard
-          label="NPL Accounts"
-          value={oversight.nplAccounts.length}
-          note="91+ days or NPL classified"
-        />
-
-        <MetricCard
-          label="Board Attention Items"
-          value={oversight.boardAttentionItems.length}
-          note="Items requiring oversight visibility"
-        />
-      </section>
-
-      <section style={styles.card}>
-        <h2 style={styles.sectionTitle}>Board Attention Items</h2>
-
-        <p style={styles.helper}>
-          These are not operational tasks for the board to edit. They are issues
-          the board may question, challenge, or request clarification on.
-        </p>
-
-        {oversight.boardAttentionItems.length === 0 ? (
-          <p style={styles.empty}>
-            No board attention items found yet. Upload portfolio data and create
-            tracker actions first.
-          </p>
-        ) : (
-          <div style={styles.tableWrap}>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Type</th>
-                  <th style={styles.th}>Loan Account</th>
-                  <th style={styles.th}>Member</th>
-                  <th style={styles.th}>Responsible Officer</th>
-                  <th style={styles.th}>Issue</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {oversight.boardAttentionItems.slice(0, 30).map((item, index) => (
-                  <tr key={`${item.type}-${item.account}-${index}`}>
-                    <td style={styles.tdStrong}>{item.type}</td>
-                    <td style={styles.td}>{item.account}</td>
-                    <td style={styles.td}>{item.member}</td>
-                    <td style={styles.td}>{item.officer}</td>
-                    <td style={styles.td}>{item.issue}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      <section style={styles.card}>
-        <h2 style={styles.sectionTitle}>Management Accountability Summary</h2>
-
-        <p style={styles.helper}>
-          This helps the board see where accountability sits: who owns risky
-          accounts, where NPLs are concentrated, and which officers have overdue
-          or escalated follow-up actions.
-        </p>
-
-        {oversight.accountabilitySummary.length === 0 ? (
-          <p style={styles.empty}>
-            No accountability data found yet. Once portfolio and action tracker
-            data exists, this section will populate automatically.
-          </p>
-        ) : (
-          <div style={styles.tableWrap}>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Officer</th>
-                  <th style={styles.th}>Risky Accounts</th>
-                  <th style={styles.th}>NPL Accounts</th>
-                  <th style={styles.th}>Arrears Amount</th>
-                  <th style={styles.th}>Overdue Actions</th>
-                  <th style={styles.th}>Escalated Actions</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {oversight.accountabilitySummary.map((row) => (
-                  <tr key={row.officer}>
-                    <td style={styles.tdStrong}>{row.officer}</td>
-                    <td style={styles.td}>{row.riskyCount}</td>
-                    <td style={styles.td}>{row.nplCount}</td>
-                    <td style={styles.td}>
-                      {row.arrearsAmount.toLocaleString()}
-                    </td>
-                    <td style={styles.td}>{row.overdueActions}</td>
-                    <td style={styles.td}>{row.escalatedActions}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      <section style={styles.warningBox}>
-        <h2 style={styles.sectionTitle}>MVP Governance Note</h2>
-
-        <p style={styles.helper}>
-          Management can still operate the portfolio, early warning, watchlist
-          and action tracker. The board layer is designed to preserve oversight,
-          accountability, and unresolved-risk visibility. In the backend phase,
-          management should not be able to delete audit history or remove board
-          visibility once an issue has been escalated.
-        </p>
-      </section>
-    </main>
-  );
-}
-
-function MetricCard({
+function Metric({
   label,
   value,
   note,
+  tone = "slate",
 }: {
   label: string;
-  value: number;
+  value: string | number;
   note: string;
+  tone?: "slate" | "amber" | "red" | "blue";
 }) {
+  const tones = {
+    slate: "border-slate-200 bg-white text-slate-950",
+    amber: "border-amber-200 bg-amber-50 text-amber-950",
+    red: "border-red-200 bg-red-50 text-red-950",
+    blue: "border-blue-200 bg-blue-50 text-blue-950",
+  };
   return (
-    <div style={styles.metricCard}>
-      <p style={styles.metricLabel}>{label}</p>
-      <h2 style={styles.metricValue}>{value}</h2>
-      <p style={styles.metricNote}>{note}</p>
+    <div className={`rounded-2xl border p-4 shadow-sm ${tones[tone]}`}>
+      <p className="text-xs font-bold uppercase tracking-wide">{label}</p>
+      <p className="mt-2 text-3xl font-black">{value}</p>
+      <p className="mt-1 text-xs font-medium opacity-75">{note}</p>
     </div>
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    background: "#080b12",
-    color: "#f5f0e6",
-    padding: "48px",
-    fontFamily: "Manrope, sans-serif",
-  },
+export default function BoardOversightPage() {
+  const isHydrated = useSyncExternalStore(
+    subscribeToHydration,
+    () => true,
+    () => false
+  );
+  const [records] = useState<LoanRecord[]>(() =>
+    readStored<LoanRecord[]>("kiprod_loan_records", [])
+  );
+  const [actions] = useState<ActionItem[]>(() =>
+    readStored<ActionItem[]>("kiprod_action_items", [])
+  );
+  const [clarifications, setClarifications] = useState<ClarificationRequest[]>([]);
+  const [boardNotes, setBoardNotes] = useState<BoardNote[]>(() =>
+    readStored<BoardNote[]>("kiprod_board_notes", [])
+  );
+  const [reviewed, setReviewed] = useState<string[]>(() =>
+    readStored<string[]>("kiprod_board_reviewed", [])
+  );
+  const [message, setMessage] = useState("");
+  const [currency] = useState(() => {
+    const profile = readStored<Record<string, string>>(
+      "kiprodInstitutionProfile",
+      {}
+    );
+    return profile.reportingCurrency || profile.currency || "KES";
+  });
+  const [lastReport] = useState(() => {
+    const profile = readStored<Record<string, string>>(
+      "kiprodInstitutionProfile",
+      {}
+    );
+    return (
+      (typeof window !== "undefined"
+        ? localStorage.getItem("kiprod_last_board_report")
+        : null) ||
+      profile.reportingMonth ||
+      "Not generated"
+    );
+  });
 
-  header: {
-    maxWidth: "1100px",
-    marginBottom: "32px",
-  },
+  useEffect(() => {
+    const institutionId =
+      process.env.NEXT_PUBLIC_DEFAULT_INSTITUTION_ID || "";
+    if (institutionId) {
+      supabase
+        .from("clarification_requests")
+        .select(
+          "id,loan_account,member_name,question,assigned_to,status,management_response,created_at"
+        )
+        .eq("institution_id", institutionId)
+        .order("created_at", { ascending: false })
+        .then(({ data }) =>
+          setClarifications((data || []) as ClarificationRequest[])
+        );
+    }
+  }, []);
 
-  kicker: {
-    color: "#d6a84f",
-    fontSize: "13px",
-    letterSpacing: "0.14em",
-    textTransform: "uppercase",
-    marginBottom: "12px",
-  },
+  const analysis = useMemo(() => {
+    const totalExposure = records.reduce(
+      (sum, record) => sum + Number(record.outstanding_balance || 0),
+      0
+    );
+    const highExposureThreshold = Math.max(totalExposure * 0.05, 1_000_000);
+    const recordMap = new Map(
+      records.map((record) => [record.loan_account, record])
+    );
 
-  title: {
-    fontSize: "42px",
-    margin: "0 0 12px",
-  },
+    const openClarifications = clarifications.filter(
+      (request) => !["Closed", "Converted to Action"].includes(request.status)
+    );
 
-  subtitle: {
-    color: "#b7bdc8",
-    fontSize: "17px",
-    lineHeight: 1.6,
-    maxWidth: "920px",
-  },
+    const candidateActions = actions.filter((action) => {
+      const record = recordMap.get(action.loan_account);
+      const flags = (record?.risk_flags || []).join(" ").toLowerCase();
+      const escalationLevel = String(action.escalation_level || "");
+      return (
+        !isClosed(action) &&
+        (daysOverdue(action.due_date) > 0 ||
+          action.risk_status === "NPL" ||
+          Number(record?.outstanding_balance || 0) >= highExposureThreshold ||
+          escalationLevel.includes("Level 4") ||
+          action.board_visible ||
+          flags.includes("deteriorat") ||
+          flags.includes("repeat") ||
+          !String(action.assigned_to || "").trim())
+      );
+    });
 
-  contextBox: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: "16px",
-    marginTop: "22px",
-    padding: "16px",
-    background: "#101621",
-    border: "1px solid rgba(214,168,79,0.25)",
-    borderRadius: "16px",
-    color: "#c9d0dc",
-  },
+    const issues: BoardIssue[] = candidateActions.map((action, index) => {
+      const record = recordMap.get(action.loan_account);
+      const flags = (record?.risk_flags || []).join(" ").toLowerCase();
+      const actionId =
+        String(action.action_id || "").trim() ||
+        `LEGACY-${String(index + 1).padStart(4, "0")}`;
+      const issueId = `BO-${actionId.replace(/^ACT-/, "")}`;
+      const escalationLevel = String(action.escalation_level || "");
+      const relatedClarification = openClarifications.find(
+        (request) => request.loan_account === action.loan_account
+      );
+      const exposure = Number(record?.outstanding_balance || 0);
+      const reasons: string[] = [];
 
-  metricsGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
-    gap: "18px",
-    marginBottom: "28px",
-    maxWidth: "1200px",
-  },
+      if (daysOverdue(action.due_date) > 0) reasons.push("Action overdue");
+      if (action.risk_status === "NPL") reasons.push("NPL account");
+      if (exposure >= highExposureThreshold) reasons.push("Material exposure");
+      if (escalationLevel.includes("Level 4"))
+        reasons.push("Level 4 escalation");
+      if (flags.includes("deteriorat") || flags.includes("repeat"))
+        reasons.push("Repeated deterioration");
+      if (!String(action.assigned_to || "").trim())
+        reasons.push("No responsible officer");
+      if (relatedClarification) reasons.push("Clarification unresolved");
+      if (action.board_visible && reasons.length === 0)
+        reasons.push("Marked Board-visible");
 
-  metricCard: {
-    background: "#101621",
-    border: "1px solid rgba(214,168,79,0.22)",
-    borderRadius: "18px",
-    padding: "22px",
-  },
+      return {
+        issueId,
+        riskSource: action.risk_source || "Execution Tracker",
+        memberName: action.member_name || record?.member_name || "Not recorded",
+        loanAccount: action.loan_account,
+        riskClass: action.risk_status,
+        exposure,
+        issue: action.action_required || "Management action remains unresolved.",
+        managementOwner: action.assigned_to || "Unassigned",
+        dueDate: action.due_date || "Not set",
+        daysOverdue: daysOverdue(action.due_date),
+        escalationLevel:
+          action.escalation_level || "Level 1: Officer Follow-up",
+        clarificationStatus: relatedClarification?.status || "None raised",
+        latestNote:
+          boardNotes.find((note) => note.issueId === issueId)
+            ?.note ||
+          action.notes ||
+          "No management note",
+        visibilityReasons: reasons,
+      };
+    });
 
-  metricLabel: {
-    color: "#b7bdc8",
-    fontSize: "13px",
-    textTransform: "uppercase",
-    letterSpacing: "0.08em",
-    margin: "0 0 10px",
-  },
+    const accountedLoans = new Set(issues.map((issue) => issue.loanAccount));
+    records.forEach((record, index) => {
+      if (record.risk_status === "Green" || accountedLoans.has(record.loan_account))
+        return;
+      const flags = (record.risk_flags || []).join(" ").toLowerCase();
+      const exposure = Number(record.outstanding_balance || 0);
+      const reasons: string[] = [];
+      if (record.risk_status === "NPL") reasons.push("NPL account");
+      if (exposure >= highExposureThreshold) reasons.push("Material exposure");
+      if (!String(record.responsible_officer || "").trim())
+        reasons.push("No responsible officer");
+      if (flags.includes("deteriorat") || flags.includes("repeat"))
+        reasons.push("Repeated deterioration");
+      if (!reasons.length) return;
 
-  metricValue: {
-    color: "#fff",
-    fontSize: "38px",
-    margin: "0",
-  },
+      issues.push({
+        issueId: `BO-R${String(index + 1).padStart(4, "0")}`,
+        riskSource: record.restructured === "Yes" ? "Restructured Account" : "Portfolio Risk",
+        memberName: record.member_name,
+        loanAccount: record.loan_account,
+        riskClass: record.risk_status,
+        exposure,
+        issue: `${record.risk_status} account requires management oversight follow-up.`,
+        managementOwner: record.responsible_officer || "Unassigned",
+        dueDate: "Not set",
+        daysOverdue: 0,
+        escalationLevel:
+          record.risk_status === "NPL"
+            ? "Level 4: Board Visibility"
+            : "Level 3: Senior Management Escalation",
+        clarificationStatus:
+          openClarifications.find(
+            (request) => request.loan_account === record.loan_account
+          )?.status || "None raised",
+        latestNote:
+          boardNotes.find(
+            (note) => note.issueId === `BO-R${String(index + 1).padStart(4, "0")}`
+          )?.note || "No management note",
+        visibilityReasons: reasons,
+      });
+    });
 
-  metricNote: {
-    color: "#d6a84f",
-    margin: "8px 0 0",
-    fontSize: "14px",
-  },
+    return {
+      issues,
+      overdue: issues.filter((issue) => issue.daysOverdue > 0).length,
+      escalated: issues.filter((issue) =>
+        issue.escalationLevel.match(/Level [34]/)
+      ).length,
+      npl: issues.filter((issue) => issue.riskClass === "NPL").length,
+      unresolvedClarifications: openClarifications.length,
+      highExposure: issues.filter((issue) =>
+        issue.visibilityReasons.includes("Material exposure")
+      ).length,
+      deterioration: issues.filter((issue) =>
+        issue.visibilityReasons.includes("Repeated deterioration")
+      ).length,
+    };
+  }, [records, actions, clarifications, boardNotes]);
 
-  card: {
-    background: "#101621",
-    border: "1px solid rgba(214,168,79,0.25)",
-    borderRadius: "20px",
-    padding: "28px",
-    maxWidth: "1200px",
-    marginBottom: "28px",
-  },
+  function saveReviewed(issue: BoardIssue) {
+    const next = reviewed.includes(issue.issueId)
+      ? reviewed.filter((id) => id !== issue.issueId)
+      : [...reviewed, issue.issueId];
+    setReviewed(next);
+    localStorage.setItem("kiprod_board_reviewed", JSON.stringify(next));
+    appendAudit(
+      "BOARD_MARKED_REVIEWED",
+      issue,
+      `Board review status updated for ${issue.memberName}.`,
+      next.includes(issue.issueId) ? "Reviewed" : "Review removed"
+    );
+    setMessage(
+      next.includes(issue.issueId)
+        ? `${issue.issueId} marked as reviewed.`
+        : `${issue.issueId} review mark removed.`
+    );
+  }
 
-  warningBox: {
-    background: "rgba(214,168,79,0.08)",
-    border: "1px solid rgba(214,168,79,0.35)",
-    borderRadius: "20px",
-    padding: "28px",
-    maxWidth: "1200px",
-  },
+  function addBoardNote(issue: BoardIssue) {
+    const note = window.prompt(
+      `Add a Board governance note for ${issue.memberName}:`,
+      ""
+    );
+    if (!note?.trim()) return;
+    const next = [
+      { issueId: issue.issueId, note: note.trim(), updatedAt: new Date().toISOString() },
+      ...boardNotes.filter((item) => item.issueId !== issue.issueId),
+    ];
+    setBoardNotes(next);
+    localStorage.setItem("kiprod_board_notes", JSON.stringify(next));
+    appendAudit(
+      "BOARD_NOTE_ADDED",
+      issue,
+      note.trim(),
+      "Board note recorded"
+    );
+    setMessage(`Board note saved for ${issue.issueId}.`);
+  }
 
-  sectionTitle: {
-    margin: "0 0 10px",
-    fontSize: "22px",
-  },
+  function escalateForMeeting(issue: BoardIssue) {
+    appendAudit(
+      "ESCALATED_FOR_BOARD_MEETING",
+      issue,
+      `${issue.memberName} escalated for the next Board meeting.`,
+      "Next Board Meeting"
+    );
+    setMessage(`${issue.issueId} recorded for the next Board meeting.`);
+  }
 
-  helper: {
-    color: "#b7bdc8",
-    lineHeight: 1.6,
-  },
+  async function requestClarification(issue: BoardIssue) {
+    const institutionId =
+      process.env.NEXT_PUBLIC_DEFAULT_INSTITUTION_ID || "";
+    if (!institutionId) {
+      setMessage(
+        "Clarification could not be created because the default institution ID is not configured."
+      );
+      return;
+    }
 
-  empty: {
-    color: "#b7bdc8",
-    padding: "18px 0",
-  },
+    const question = `Management to clarify why this ${issue.riskClass} matter remains unresolved: ${issue.issue}`;
+    const { data, error } = await supabase
+      .from("clarification_requests")
+      .insert({
+        institution_id: institutionId,
+        request_title: `Board clarification: ${issue.loanAccount}`,
+        loan_account: issue.loanAccount,
+        member_name: issue.memberName,
+        issue_type: "Board Oversight",
+        question,
+        requested_by_role:
+          localStorage.getItem("kiprodCurrentRole") || "Board User",
+        assigned_to:
+          issue.managementOwner === "Unassigned"
+            ? null
+            : issue.managementOwner,
+        status: "Pending Management Response",
+      })
+      .select(
+        "id,loan_account,member_name,question,assigned_to,status,management_response,created_at"
+      )
+      .single();
 
-  tableWrap: {
-    overflowX: "auto",
-    marginTop: "18px",
-  },
+    if (error) {
+      setMessage(`Clarification request failed: ${error.message}`);
+      return;
+    }
 
-  table: {
-    width: "100%",
-    borderCollapse: "collapse",
-  },
+    setClarifications((current) => [
+      data as ClarificationRequest,
+      ...current,
+    ]);
+    appendAudit(
+      "BOARD_CLARIFICATION_REQUESTED",
+      issue,
+      question,
+      "Pending Management Response"
+    );
+    setMessage(
+      `Clarification request created for ${issue.issueId} and recorded in Audit History.`
+    );
+  }
 
-  th: {
-    textAlign: "left",
-    padding: "14px",
-    color: "#d6a84f",
-    borderBottom: "1px solid #273244",
-    fontSize: "13px",
-    textTransform: "uppercase",
-    letterSpacing: "0.08em",
-  },
+  if (!isHydrated) {
+    return (
+      <main className="min-h-screen bg-slate-100 px-4 py-6 text-slate-950 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-[1700px]">
+          <section className="rounded-3xl bg-slate-950 p-6 text-white shadow-xl sm:p-8">
+            <p className="text-xs font-black uppercase tracking-[0.24em] text-amber-400">
+              Board Governance Monitoring Layer
+            </p>
+            <h1 className="mt-2 text-3xl font-black sm:text-4xl">
+              Board Oversight
+            </h1>
+            <p className="mt-3 text-sm text-slate-300">
+              Loading Board governance data…
+            </p>
+          </section>
+        </div>
+      </main>
+    );
+  }
 
-  td: {
-    padding: "14px",
-    borderBottom: "1px solid #1d2635",
-    color: "#d7dce5",
-    verticalAlign: "top",
-  },
+  return (
+    <main className="min-h-screen bg-slate-100 px-4 py-6 text-slate-950 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-[1700px]">
+        <section className="rounded-3xl bg-slate-950 p-6 text-white shadow-xl sm:p-8">
+          <p className="text-xs font-black uppercase tracking-[0.24em] text-amber-400">
+            Board Governance Monitoring Layer
+          </p>
+          <h1 className="mt-2 text-3xl font-black sm:text-4xl">
+            Board Oversight
+          </h1>
+          <p className="mt-3 max-w-5xl text-sm leading-6 text-slate-200 sm:text-base">
+            The Board Oversight page provides Board-level visibility over
+            unresolved risks, overdue management actions, escalated credit
+            concerns, clarification requests, and accountability gaps without
+            giving Board users operational edit rights.
+          </p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Link
+              href="/board-pack"
+              className="rounded-xl border border-slate-600 bg-white px-4 py-2 text-sm font-bold text-slate-950 shadow hover:bg-slate-100"
+            >
+              Open Board Report
+            </Link>
+            <Link
+              href="/clarification-requests"
+              className="rounded-xl border border-amber-400 bg-amber-400 px-4 py-2 text-sm font-bold text-slate-950 shadow hover:bg-amber-300"
+            >
+              Clarification Requests
+            </Link>
+            <Link
+              href="/audit-history"
+              className="rounded-xl border border-slate-500 bg-slate-800 px-4 py-2 text-sm font-bold text-white shadow hover:bg-slate-700"
+            >
+              Audit History
+            </Link>
+          </div>
+        </section>
 
-  tdStrong: {
-    padding: "14px",
-    borderBottom: "1px solid #1d2635",
-    color: "#fff",
-    fontWeight: 800,
-    verticalAlign: "top",
-  },
-  actions: {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: "14px",
-  marginTop: "24px",
-},
+        {message && (
+          <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-950">
+            {message}
+          </div>
+        )}
 
-primaryButton: {
-  background: "#d6a84f",
-  color: "#080b12",
-  textDecoration: "none",
-  borderRadius: "999px",
-  padding: "13px 20px",
-  fontWeight: 900,
-},
+        <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Metric label="Board-Visible Risks" value={analysis.issues.length} note="Material or unresolved matters" tone="red" />
+          <Metric label="Overdue Actions" value={analysis.overdue} note="Past agreed management due date" tone="amber" />
+          <Metric label="Escalated Accounts" value={analysis.escalated} note="Level 3 or Level 4 matters" tone="red" />
+          <Metric label="NPL Attention" value={analysis.npl} note="Non-performing matters visible here" tone="red" />
+          <Metric label="Unresolved Clarifications" value={analysis.unresolvedClarifications} note="Awaiting closure or response" tone="blue" />
+          <Metric label="High Exposure Accounts" value={analysis.highExposure} note="Material exposure threshold triggered" tone="amber" />
+          <Metric label="Repeated Deterioration" value={analysis.deterioration} note="Repeated-risk flags identified" tone="amber" />
+          <Metric label="Last Report Generated" value={lastReport} note="Formal Board Report reference" tone="slate" />
+        </section>
 
-secondaryButton: {
-  background: "rgba(16, 22, 33, 0.88)",
-  color: "#f5f0e6",
-  textDecoration: "none",
-  border: "1px solid rgba(214,168,79,0.3)",
-  borderRadius: "999px",
-  padding: "13px 20px",
-  fontWeight: 800,
-},
-};
+        <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 text-slate-950 shadow-sm">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-black text-slate-950">
+                1. Escalated Risk Matters
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Board-visible matters are selected through overdue, NPL,
+                material-exposure, Level 4, deterioration, clarification, and
+                ownership triggers.
+              </p>
+            </div>
+            <p className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
+              Scroll sideways inside the register to view all 13 columns →
+            </p>
+          </div>
+
+          {analysis.issues.length === 0 ? (
+            <div className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-700">
+              No Board-visible matters have been generated yet. Complete the
+              Institution Profile, upload portfolio data, and create Execution
+              Tracker actions first.
+            </div>
+          ) : (
+            <div className="mt-5 w-full overflow-x-scroll rounded-xl border border-slate-300 bg-white pb-3">
+              <table className="min-w-[2450px] table-fixed text-left text-xs text-slate-950">
+                <thead className="bg-slate-950 text-white">
+                  <tr>
+                    {[
+                      ["Issue ID", 110],
+                      ["Risk Source", 150],
+                      ["Member / Account", 220],
+                      ["Risk Class", 100],
+                      ["Exposure", 150],
+                      ["Issue Requiring Oversight", 330],
+                      ["Management Owner", 170],
+                      ["Due Date", 120],
+                      ["Days Overdue", 110],
+                      ["Escalation Level", 230],
+                      ["Board Clarification Status", 210],
+                      ["Latest Management / Board Note", 300],
+                      ["Board Visibility Reason", 260],
+                    ].map(([label, width]) => (
+                      <th
+                        key={String(label)}
+                        className="px-3 py-3 font-bold"
+                        style={{ width: Number(width) }}
+                      >
+                        {label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="bg-white text-slate-950">
+                  {analysis.issues.map((issue) => (
+                    <tr
+                      key={issue.issueId}
+                      className="border-b border-slate-200 align-top hover:bg-slate-50"
+                    >
+                      <td className="px-3 py-3 font-black text-slate-950">
+                        {issue.issueId}
+                        {reviewed.includes(issue.issueId) && (
+                          <span className="mt-1 block text-[10px] font-bold text-emerald-700">
+                            Reviewed
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-slate-800">{issue.riskSource}</td>
+                      <td className="px-3 py-3">
+                        <strong className="block text-slate-950">{issue.memberName}</strong>
+                        <span className="text-slate-600">{issue.loanAccount}</span>
+                      </td>
+                      <td className="px-3 py-3">
+                        <span className={`rounded-full px-2 py-1 font-black ${
+                          issue.riskClass === "NPL"
+                            ? "bg-red-100 text-red-800"
+                            : issue.riskClass === "Red"
+                              ? "bg-orange-100 text-orange-800"
+                              : "bg-amber-100 text-amber-800"
+                        }`}>
+                          {issue.riskClass}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 font-bold text-slate-950">
+                        {formatMoney(issue.exposure, currency)}
+                      </td>
+                      <td className="px-3 py-3 text-slate-800">{issue.issue}</td>
+                      <td className={`px-3 py-3 font-bold ${
+                        issue.managementOwner === "Unassigned"
+                          ? "text-red-700"
+                          : "text-slate-950"
+                      }`}>
+                        {issue.managementOwner}
+                      </td>
+                      <td className="px-3 py-3 text-slate-800">{issue.dueDate}</td>
+                      <td className={`px-3 py-3 font-black ${
+                        issue.daysOverdue > 0 ? "text-red-700" : "text-slate-700"
+                      }`}>
+                        {issue.daysOverdue || "—"}
+                      </td>
+                      <td className="px-3 py-3 text-slate-800">{issue.escalationLevel}</td>
+                      <td className="px-3 py-3 text-slate-800">{issue.clarificationStatus}</td>
+                      <td className="px-3 py-3 text-slate-800">{issue.latestNote}</td>
+                      <td className="px-3 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {issue.visibilityReasons.map((reason) => (
+                            <span
+                              key={reason}
+                              className="rounded-md border border-slate-300 bg-slate-100 px-2 py-1 font-bold text-slate-800"
+                            >
+                              {reason}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="mt-6 grid gap-6 lg:grid-cols-2">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 text-slate-950 shadow-sm">
+            <h2 className="text-xl font-black text-slate-950">
+              2. Overdue Management Actions
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-700">
+              {analysis.overdue > 0
+                ? `${analysis.overdue} Board-visible management action${analysis.overdue === 1 ? " is" : "s are"} beyond the agreed due date and require accountability follow-up.`
+                : "No Board-visible management action is currently overdue."}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 text-slate-950 shadow-sm">
+            <h2 className="text-xl font-black text-slate-950">
+              3. Board Clarification Requests
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-700">
+              {analysis.unresolvedClarifications > 0
+                ? `${analysis.unresolvedClarifications} clarification request${analysis.unresolvedClarifications === 1 ? " remains" : "s remain"} unresolved and should be tracked against management response timelines.`
+                : "No unresolved Board clarification request is currently recorded."}
+            </p>
+            <Link
+              href="/clarification-requests"
+              className="mt-4 inline-block rounded-lg border border-blue-700 bg-blue-700 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800"
+            >
+              Open Clarification Register
+            </Link>
+          </div>
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 text-slate-950 shadow-sm">
+          <h2 className="text-xl font-black text-slate-950">
+            4. Governance Accountability Notes
+          </h2>
+          <p className="mt-2 text-sm text-slate-700">
+            Use these governance actions on a Board-visible issue. They record
+            Board review and challenge in Audit History; they do not edit the
+            loan book, borrower follow-up, or management action record.
+          </p>
+          {analysis.issues.length > 0 && (
+            <div className="mt-4 space-y-3">
+              {analysis.issues.slice(0, 12).map((issue) => (
+                <div
+                  key={issue.issueId}
+                  className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="font-black text-slate-950">
+                        {issue.issueId} · {issue.memberName}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-600">
+                        {issue.loanAccount} · {issue.visibilityReasons.join(", ")}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => requestClarification(issue)}
+                        className="rounded-lg border border-blue-700 bg-blue-700 px-3 py-2 text-xs font-bold text-white hover:bg-blue-800"
+                      >
+                        Request Clarification
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => saveReviewed(issue)}
+                        className="rounded-lg border border-emerald-700 bg-emerald-700 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-800"
+                      >
+                        {reviewed.includes(issue.issueId)
+                          ? "Remove Reviewed Mark"
+                          : "Mark Reviewed"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => escalateForMeeting(issue)}
+                        className="rounded-lg border border-red-700 bg-red-700 px-3 py-2 text-xs font-bold text-white hover:bg-red-800"
+                      >
+                        Escalate for Next Board Meeting
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => addBoardNote(issue)}
+                        className="rounded-lg border border-slate-700 bg-white px-3 py-2 text-xs font-bold text-slate-950 hover:bg-slate-100"
+                      >
+                        Add Board Note
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-amber-300 bg-amber-50 p-5 text-amber-950 shadow-sm">
+          <h2 className="text-lg font-black text-amber-950">
+            Governance Reminder
+          </h2>
+          <p className="mt-2 text-sm font-semibold leading-6 text-amber-950">
+            Board users can review escalated risks, request clarification, and
+            monitor unresolved actions. Operational updates remain the
+            responsibility of management users.
+          </p>
+        </section>
+      </div>
+    </main>
+  );
+}

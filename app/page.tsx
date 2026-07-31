@@ -1,3 +1,14 @@
+import Link from "next/link";
+
+const workflowSteps = [
+  "Set Up Institution",
+  "Upload Portfolio",
+  "Review Risk Intelligence",
+  "Assign Management Actions",
+  "Generate Board Report",
+  "Preserve Board Oversight",
+];
+
 export default function Home() {
   return (
     <main style={styles.page}>
@@ -7,18 +18,23 @@ export default function Home() {
         <h1 style={styles.title}>Credit Risk Command Centre</h1>
 
         <p style={styles.subtitle}>
-          Board-ready credit risk visibility, early warning monitoring, and
-          management action tracking for financial institutions.
+          An executive risk intelligence platform that helps financial
+          institutions convert portfolio data into early warning insight,
+          Board-ready reporting, and accountable management action.
         </p>
 
         <div style={styles.primaryActions}>
-          <a style={styles.primaryButton} href="/portfolio-upload">
-            Start with Portfolio Upload
-          </a>
+          <Link style={styles.primaryButton} href="/institution-profile">
+            Start with Institution Profile
+          </Link>
 
-          <a style={styles.secondaryButton} href="/executive-dashboard">
-            Open Executive Dashboard
-          </a>
+          <Link style={styles.secondaryButton} href="/portfolio-upload">
+            Upload Portfolio
+          </Link>
+
+          <Link style={styles.secondaryButton} href="/executive-dashboard">
+            Open Executive Cockpit
+          </Link>
         </div>
       </section>
 
@@ -30,6 +46,15 @@ export default function Home() {
           management actions, prepare board reporting, and preserve board
           oversight.
         </p>
+
+        <div style={styles.workflowGrid}>
+          {workflowSteps.map((step, index) => (
+            <div style={styles.workflowStep} key={step}>
+              <span style={styles.workflowNumber}>{index + 1}</span>
+              <span style={styles.workflowLabel}>{step}</span>
+            </div>
+          ))}
+        </div>
       </section>
 
       <section style={styles.section}>
@@ -43,20 +68,20 @@ export default function Home() {
         </div>
 
         <div style={styles.navGrid}>
-          <a style={styles.navCard} href="/institution-profile">
+          <Link style={styles.navCard} href="/institution-profile">
             <span style={styles.navTitle}>Institution Profile</span>
             <span style={styles.navText}>
               Set the institution name, reporting month, risk lead and board
               oversight context.
             </span>
-          </a>
+          </Link>
 
-          <a style={styles.navCard} href="/portfolio-upload">
+          <Link style={styles.navCard} href="/portfolio-upload">
             <span style={styles.navTitle}>Portfolio Upload</span>
             <span style={styles.navText}>
               Upload and validate portfolio data for credit risk classification.
             </span>
-          </a>
+          </Link>
         </div>
       </section>
 
@@ -71,44 +96,44 @@ export default function Home() {
         </div>
 
         <div style={styles.navGrid}>
-          <a style={styles.navCard} href="/executive-dashboard">
-            <span style={styles.navTitle}>Executive Dashboard</span>
+          <Link style={styles.navCard} href="/executive-dashboard">
+            <span style={styles.navTitle}>Executive Cockpit</span>
             <span style={styles.navText}>
               View portfolio health, early warning signals, watchlist exposure
               and risk intelligence summaries.
             </span>
-          </a>
+          </Link>
 
-          <a style={styles.navCard} href="/early-warning">
+          <Link style={styles.navCard} href="/early-warning">
             <span style={styles.navTitle}>Early Warning</span>
             <span style={styles.navText}>
               Review Amber, Red and NPL accounts requiring management attention.
             </span>
-          </a>
+          </Link>
 
-          <a style={styles.navCard} href="/watchlist">
+          <Link style={styles.navCard} href="/watchlist">
             <span style={styles.navTitle}>Watchlist</span>
             <span style={styles.navText}>
               Track risky accounts requiring close monitoring, intervention and
               follow-up.
             </span>
-          </a>
+          </Link>
 
-          <a style={styles.navCard} href="/action-tracker">
-            <span style={styles.navTitle}>Action Tracker</span>
+          <Link style={styles.navCard} href="/action-tracker">
+            <span style={styles.navTitle}>Execution Tracker</span>
             <span style={styles.navText}>
               Assign officers, due dates, status updates and notes for risky
               accounts.
             </span>
-          </a>
+          </Link>
 
-          <a style={styles.navCard} href="/board-report">
+          <Link style={styles.navCard} href="/board-pack">
             <span style={styles.navTitle}>Board Report</span>
             <span style={styles.navText}>
               Prepare executive credit risk summaries for board reporting and
               oversight.
             </span>
-          </a>
+          </Link>
         </div>
       </section>
 
@@ -123,35 +148,37 @@ export default function Home() {
         </div>
 
         <div style={styles.navGrid}>
-          <a style={styles.navCard} href="/role-access">
+          <Link style={styles.navCard} href="/role-access">
             <span style={styles.navTitle}>Role Access</span>
             <span style={styles.navText}>
               Define access responsibilities for board, management and KIPROD
               Admin users.
             </span>
-          </a>
+          </Link>
 
-          <a style={styles.navCard} href="/board-oversight">
+          <Link style={styles.navCard} href="/board-oversight">
             <span style={styles.navTitle}>Board Oversight</span>
             <span style={styles.navText}>
               View unresolved risks, overdue actions, escalated items, NPL
               exposure and accountability gaps.
             </span>
-          </a>
-<a style={styles.navCard} href="/clarification-requests">
-  <span style={styles.navTitle}>Clarification Requests</span>
-  <span style={styles.navText}>
-    Allow board users to request management explanations on unresolved risks,
-    overdue actions, NPL exposure and accountability gaps.
-  </span>
-</a>
-          <a style={styles.navCard} href="/audit-history">
-  <span style={styles.navTitle}>Audit History</span>
-  <span style={styles.navText}>
-    Preserve a record of action changes, status updates, officer changes and
-    board clarification requests.
-  </span>
-</a>
+          </Link>
+
+          <Link style={styles.navCard} href="/clarification-requests">
+            <span style={styles.navTitle}>Clarification Requests</span>
+            <span style={styles.navText}>
+              Allow board users to request management explanations on unresolved
+              risks, overdue actions, NPL exposure and accountability gaps.
+            </span>
+          </Link>
+
+          <Link style={styles.navCard} href="/audit-history">
+            <span style={styles.navTitle}>Audit History</span>
+            <span style={styles.navText}>
+              Preserve a record of action changes, status updates, officer
+              changes and board clarification requests.
+            </span>
+          </Link>
         </div>
       </section>
     </main>
@@ -242,8 +269,45 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#b7bdc8",
     fontSize: "16px",
     lineHeight: 1.65,
-    margin: 0,
+    margin: "0 0 22px",
     maxWidth: "940px",
+  },
+
+  workflowGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+    gap: "12px",
+  },
+
+  workflowStep: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    minHeight: "64px",
+    padding: "12px",
+    background: "rgba(5, 7, 13, 0.56)",
+    border: "1px solid rgba(214,168,79,0.16)",
+    borderRadius: "14px",
+  },
+
+  workflowNumber: {
+    display: "grid",
+    placeItems: "center",
+    flex: "0 0 30px",
+    width: "30px",
+    height: "30px",
+    color: "#080b12",
+    background: "#d6a84f",
+    borderRadius: "999px",
+    fontSize: "12px",
+    fontWeight: 900,
+  },
+
+  workflowLabel: {
+    color: "#f5f0e6",
+    fontSize: "13px",
+    lineHeight: 1.35,
+    fontWeight: 800,
   },
 
   section: {
