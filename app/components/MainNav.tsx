@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 
 const navItems = [
@@ -19,8 +20,27 @@ export default function MainNav() {
   return (
     <header className="border-b border-slate-800 bg-slate-950 text-white">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-4 md:flex-row md:items-center md:justify-between">
-        <Link href="/" className="font-bold tracking-wide text-amber-400">
-          KIPROD Command Centre
+        <Link
+          href="/"
+          className="group flex min-w-fit items-center gap-3"
+          aria-label="KIPROD Credit Risk Command Centre home"
+        >
+          <Image
+            src="/icon-192.png"
+            alt=""
+            width={44}
+            height={44}
+            priority
+            className="rounded-xl border border-cyan-300/20 shadow-lg shadow-cyan-950/40 transition group-hover:scale-[1.03]"
+          />
+          <span className="leading-tight">
+            <span className="block text-xs font-extrabold uppercase tracking-[0.18em] text-cyan-300">
+              KIPROD
+            </span>
+            <span className="block text-sm font-black tracking-wide text-white">
+              Risk Command Centre
+            </span>
+          </span>
         </Link>
 
         <nav className="flex flex-wrap gap-2">
