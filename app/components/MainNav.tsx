@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const navItems = [
   { label: "Home", href: "/" },
@@ -24,8 +24,25 @@ export default function MainNav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
+  useEffect(() => {
+    if (!open) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
   return (
-    <header className="sticky top-0 z-50 border-b border-slate-800 bg-slate-950 text-white shadow-lg shadow-slate-950/10">
+    <header className="command-header sticky top-0 z-50 border-b border-slate-800 bg-slate-950 text-white shadow-lg shadow-slate-950/10">
       <div className="mx-auto max-w-[1800px] px-4 sm:px-6">
         <div className="flex min-h-16 items-center justify-between gap-3 py-2 md:min-h-20">
           <Link
@@ -53,7 +70,7 @@ export default function MainNav() {
 
           <button
             type="button"
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-900 text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-cyan-300 md:hidden"
+            className="menu-trigger inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-900 text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-cyan-300 2xl:hidden"
             aria-label={open ? "Close navigation menu" : "Open navigation menu"}
             aria-expanded={open}
             aria-controls="mobile-navigation"
@@ -67,7 +84,7 @@ export default function MainNav() {
             </span>
           </button>
 
-          <nav className="hidden max-w-[1120px] flex-wrap justify-end gap-1.5 md:flex" aria-label="Primary navigation">
+          <nav className="hidden max-w-[1120px] flex-wrap justify-end gap-1.5 2xl:flex" aria-label="Primary navigation">
             {navItems.map((item) => {
               const active = pathname === item.href;
               return (
@@ -88,23 +105,56 @@ export default function MainNav() {
           </nav>
         </div>
 
-        <nav
-          id="mobile-navigation"
-          aria-label="Mobile navigation"
-          className={`${open ? "grid" : "hidden"} max-h-[calc(100dvh-5rem)] grid-cols-1 gap-1 overflow-y-auto border-t border-slate-800 py-3 sm:grid-cols-2 md:hidden`}
-        >
-          {navItems.map((item) => {
+      </div>
+
+      <button
+        type="button"
+        aria-label="Close navigation menu"
+        tabIndex={open ? 0 : -1}
+        onClick={() => setOpen(false)}
+        className={`nav-backdrop fixed inset-0 z-[60] bg-slate-950/55 backdrop-blur-sm transition-all 2xl:hidden ${
+          open ? "visible opacity-100" : "invisible opacity-0"
+        }`}
+      />
+
+      <aside
+        id="mobile-navigation"
+        aria-label="Command Centre navigation"
+        aria-hidden={!open}
+        className={`nav-drawer fixed inset-y-0 right-0 z-[70] flex w-[min(88vw,420px)] flex-col border-l border-slate-700 bg-slate-950 shadow-2xl shadow-black/50 transition-transform 2xl:hidden ${
+          open ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
+        <div className="flex items-center justify-between border-b border-slate-800 px-5 py-5">
+          <div>
+            <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-cyan-300">KIPROD</p>
+            <p className="mt-1 text-base font-black text-white">Command Centre Menu</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-700 bg-slate-900 text-2xl font-light text-white transition hover:border-cyan-400 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-cyan-300"
+            aria-label="Close navigation menu"
+          >
+            ×
+          </button>
+        </div>
+
+        <nav className="grid flex-1 grid-cols-1 gap-2 overflow-y-auto p-4 sm:grid-cols-2 lg:grid-cols-1" aria-label="Menu links">
+          {navItems.map((item, index) => {
             const active = pathname === item.href;
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={() => setOpen(false)}
+                tabIndex={open ? 0 : -1}
                 aria-current={active ? "page" : undefined}
-                className={`rounded-xl px-4 py-3 text-sm font-bold transition ${
+                style={{ "--nav-order": index } as React.CSSProperties}
+                className={`nav-drawer-link rounded-xl border px-4 py-3 text-sm font-bold transition ${
                   active
-                    ? "bg-amber-400 text-slate-950"
-                    : "text-slate-100 hover:bg-slate-800"
+                    ? "border-amber-300 bg-amber-400 text-slate-950 shadow-md shadow-amber-950/20"
+                    : "border-slate-800 bg-slate-900 text-slate-100 hover:border-cyan-500/50 hover:bg-slate-800"
                 }`}
               >
                 {item.label}
@@ -112,7 +162,11 @@ export default function MainNav() {
             );
           })}
         </nav>
-      </div>
+
+        <p className="border-t border-slate-800 px-5 py-4 text-xs leading-5 text-slate-400">
+          Institutional risk visibility, accountability and Board oversight.
+        </p>
+      </aside>
     </header>
   );
 }

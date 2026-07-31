@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Manrope } from "next/font/google";
 import "./globals.css";
 import MainNav from "./components/MainNav";
+import PageMotion from "./components/PageMotion";
 import PwaInstall from "./components/PwaInstall";
 
 const manrope = Manrope({
@@ -52,7 +53,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={manrope.className}>
         <MainNav />
-        {children}
+        <PageMotion>{children}</PageMotion>
         <PwaInstall />
       </body>
     </html>
