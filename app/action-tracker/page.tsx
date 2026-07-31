@@ -144,6 +144,30 @@ function isBoardVisible(action: ActionItem, record?: LoanRecord): boolean {
   );
 }
 
+function getStatusColour(status: ActionStatus): string {
+  if (status === "Closed") return "border-green-300 bg-green-100 text-green-900";
+  if (status === "Overdue") return "border-red-300 bg-red-100 text-red-900";
+  if (status === "Escalated" || status === "Moved to Recovery")
+    return "border-rose-300 bg-rose-100 text-rose-900";
+  if (status === "In Progress" || status === "Intervention Agreed")
+    return "border-blue-300 bg-blue-100 text-blue-950";
+  if (status === "Awaiting Borrower Response")
+    return "border-violet-300 bg-violet-100 text-violet-950";
+  if (status === "Assigned")
+    return "border-cyan-300 bg-cyan-100 text-cyan-950";
+  return "border-slate-300 bg-slate-100 text-slate-950";
+}
+
+function getEscalationColour(level: EscalationLevel): string {
+  if (String(level || "").includes("Level 4"))
+    return "border-purple-300 bg-purple-100 text-purple-950";
+  if (String(level || "").includes("Level 3"))
+    return "border-red-300 bg-red-100 text-red-950";
+  if (String(level || "").includes("Level 2"))
+    return "border-amber-300 bg-amber-100 text-amber-950";
+  return "border-emerald-300 bg-emerald-100 text-emerald-950";
+}
+
 function normalizeAction(
   action: Partial<ActionItem> & { loan_account: string; member_name: string },
   index: number
@@ -292,8 +316,8 @@ export default function ActionTrackerPage() {
       escalated: actions.filter(
         (action) =>
           action.status === "Escalated" ||
-          action.escalation_level.includes("Level 3") ||
-          action.escalation_level.includes("Level 4")
+          String(action.escalation_level || "").includes("Level 3") ||
+          String(action.escalation_level || "").includes("Level 4")
       ).length,
       closed: actions.filter((action) => action.status === "Closed").length,
       boardVisible: actions.filter((action) =>
@@ -332,8 +356,8 @@ export default function ActionTrackerPage() {
         if (activeFilter === "Escalated")
           return (
             action.status === "Escalated" ||
-            action.escalation_level.includes("Level 3") ||
-            action.escalation_level.includes("Level 4")
+            String(action.escalation_level || "").includes("Level 3") ||
+            String(action.escalation_level || "").includes("Level 4")
           );
         if (activeFilter === "Closed") return action.status === "Closed";
         if (activeFilter === "Board Visible") return boardVisible;
@@ -498,10 +522,10 @@ export default function ActionTrackerPage() {
               <p className="mt-5 text-xs font-semibold text-slate-500">
                 Scroll sideways inside the register to view all 13 columns →
               </p>
-              <div className="mt-2 overflow-x-scroll pb-4 [scrollbar-gutter:stable]">
-                <table className="w-full min-w-[2300px] text-left text-sm">
-                  <thead>
-                    <tr className="border-b text-slate-500">
+              <div className="mt-2 overflow-x-scroll rounded-xl border border-slate-300 pb-4 [scrollbar-gutter:stable]">
+                <table className="w-full min-w-[2300px] text-left text-sm text-slate-950">
+                  <thead className="bg-slate-950">
+                    <tr className="border-b border-slate-800 text-white">
                       {[
                         "Action ID",
                         "Risk Source",
@@ -517,7 +541,7 @@ export default function ActionTrackerPage() {
                         "Latest Note",
                         "Last Updated",
                       ].map((heading) => (
-                        <th key={heading} className="px-2 py-3">
+                        <th key={heading} className="px-3 py-4 text-xs font-bold uppercase tracking-wide text-white">
                           {heading}
                         </th>
                       ))}
@@ -531,15 +555,24 @@ export default function ActionTrackerPage() {
                         recordMap.get(action.loan_account)
                       );
                       return (
-                        <tr key={action.action_id} className="border-b align-top">
-                          <td className="px-2 py-3 font-semibold">
+                        <tr
+                          key={action.action_id}
+                          className={`border-b align-top ${
+                            overdue
+                              ? "border-red-300 bg-red-100"
+                              : boardVisible
+                                ? "border-amber-300 bg-amber-100"
+                                : "border-slate-200 bg-slate-50"
+                          }`}
+                        >
+                          <td className="px-3 py-3 font-bold text-slate-950">
                             {action.action_id}
                           </td>
-                          <td className="px-2 py-3">{action.risk_source}</td>
-                          <td className="px-2 py-3 font-medium">
+                          <td className="px-3 py-3 font-semibold text-indigo-900">{action.risk_source}</td>
+                          <td className="px-3 py-3 font-semibold text-slate-950">
                             {action.member_name}
                           </td>
-                          <td className="px-2 py-3">{action.loan_account}</td>
+                          <td className="px-3 py-3 font-medium text-slate-900">{action.loan_account}</td>
                           <td className="px-2 py-3">
                             <span
                               className={`rounded-full px-3 py-1 text-xs font-bold ${
@@ -564,7 +597,7 @@ export default function ActionTrackerPage() {
                                 )
                               }
                               rows={3}
-                              className="w-72 rounded-xl border border-slate-300 p-2"
+                              className="w-72 rounded-xl border border-blue-300 bg-blue-50 p-2 text-slate-950 placeholder:text-slate-500 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-200"
                             />
                           </td>
                           <td className="px-2 py-3">
@@ -578,7 +611,7 @@ export default function ActionTrackerPage() {
                                 )
                               }
                               placeholder="Officer name"
-                              className="w-48 rounded-xl border border-slate-300 p-2"
+                              className="w-48 rounded-xl border border-cyan-300 bg-cyan-50 p-2 text-slate-950 placeholder:text-slate-500 focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-200"
                             />
                           </td>
                           <td className="px-2 py-3">
@@ -594,8 +627,8 @@ export default function ActionTrackerPage() {
                               }
                               className={`rounded-xl border p-2 ${
                                 overdue
-                                  ? "border-red-400 bg-red-50"
-                                  : "border-slate-300"
+                                  ? "border-red-400 bg-red-50 text-red-950"
+                                  : "border-amber-300 bg-amber-50 text-slate-950"
                               }`}
                             />
                             {overdue && (
@@ -614,7 +647,7 @@ export default function ActionTrackerPage() {
                                   event.target.value
                                 )
                               }
-                              className="w-56 rounded-xl border border-slate-300 p-2"
+                              className={`w-56 rounded-xl border p-2 font-semibold ${getStatusColour(action.status)}`}
                             >
                               {statuses.map((status) => (
                                 <option key={status}>{status}</option>
@@ -631,7 +664,7 @@ export default function ActionTrackerPage() {
                                   event.target.value
                                 )
                               }
-                              className="w-64 rounded-xl border border-slate-300 p-2"
+                              className={`w-64 rounded-xl border p-2 font-semibold ${getEscalationColour(action.escalation_level)}`}
                             >
                               {escalationLevels.map((level) => (
                                 <option key={level}>{level}</option>
@@ -639,7 +672,7 @@ export default function ActionTrackerPage() {
                             </select>
                           </td>
                           <td className="px-2 py-3">
-                            <label className="flex items-center gap-2">
+                            <label className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 font-bold ${boardVisible ? "border-purple-300 bg-purple-100 text-purple-950" : "border-slate-300 bg-slate-100 text-slate-800"}`}>
                               <input
                                 type="checkbox"
                                 checked={boardVisible}
@@ -666,10 +699,10 @@ export default function ActionTrackerPage() {
                               }
                               rows={3}
                               placeholder="Latest management note"
-                              className="w-64 rounded-xl border border-slate-300 p-2"
+                              className="w-64 rounded-xl border border-violet-300 bg-violet-50 p-2 text-slate-950 placeholder:text-slate-500 focus:border-violet-600 focus:outline-none focus:ring-2 focus:ring-violet-200"
                             />
                           </td>
-                          <td className="px-2 py-3 text-slate-500">
+                          <td className="px-3 py-3 font-medium text-slate-700">
                             {new Date(action.last_updated).toLocaleString()}
                           </td>
                         </tr>
