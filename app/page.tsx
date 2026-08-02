@@ -1,402 +1,251 @@
 import Link from "next/link";
 
-const workflowSteps = [
-  "Set Up Institution",
-  "Upload Portfolio",
-  "Review Risk Intelligence",
-  "Assign Management Actions",
-  "Generate Board Report",
-  "Preserve Board Oversight",
+type IconName =
+  | "institution"
+  | "upload"
+  | "cockpit"
+  | "signal"
+  | "watch"
+  | "action"
+  | "board"
+  | "oversight"
+  | "audit";
+
+const intelligence = [
+  { label: "Portfolio health", value: "Visible", tone: "green" },
+  { label: "Early warning", value: "Tracked", tone: "amber" },
+  { label: "High-risk exposure", value: "Escalated", tone: "red" },
+  { label: "Board matters", value: "Governed", tone: "gold" },
 ];
+
+const pathway = [
+  ["01", "Portfolio data", "Validated institutional information"],
+  ["02", "Risk intelligence", "Signals, trends and exposure visibility"],
+  ["03", "Management action", "Ownership, deadlines and escalation"],
+  ["04", "Board oversight", "Clear governance and accountability"],
+  ["05", "Audit evidence", "A preserved institutional trail"],
+];
+
+const modules: Array<{
+  icon: IconName;
+  eyebrow: string;
+  title: string;
+  text: string;
+  href: string;
+  featured?: boolean;
+}> = [
+  {
+    icon: "cockpit",
+    eyebrow: "Executive intelligence",
+    title: "Executive Cockpit",
+    text: "A consolidated view of portfolio health, emerging risk and matters requiring leadership attention.",
+    href: "/executive-dashboard",
+    featured: true,
+  },
+  {
+    icon: "signal",
+    eyebrow: "Detect earlier",
+    title: "Early Warning",
+    text: "Identify Amber, Red and NPL accounts before risk becomes institutional loss.",
+    href: "/early-warning",
+  },
+  {
+    icon: "watch",
+    eyebrow: "Monitor exposure",
+    title: "Watchlist",
+    text: "Focus intervention on accounts that require closer monitoring and follow-through.",
+    href: "/watchlist",
+  },
+  {
+    icon: "action",
+    eyebrow: "Drive accountability",
+    title: "Execution Tracker",
+    text: "Connect every material risk to an owner, action, deadline and escalation path.",
+    href: "/action-tracker",
+  },
+  {
+    icon: "board",
+    eyebrow: "Report formally",
+    title: "Board Intelligence",
+    text: "Convert live risk information into a concise, credible and Board-ready pack.",
+    href: "/board-pack",
+  },
+  {
+    icon: "oversight",
+    eyebrow: "Govern clearly",
+    title: "Board Oversight",
+    text: "Give the Board a clear lens on overdue actions, escalations and management accountability.",
+    href: "/board-oversight",
+  },
+  {
+    icon: "audit",
+    eyebrow: "Preserve evidence",
+    title: "Governance Trail",
+    text: "Maintain a defensible history of decisions, updates and clarification requests.",
+    href: "/audit-history",
+  },
+];
+
+function ModuleIcon({ name }: { name: IconName }) {
+  const paths: Record<IconName, React.ReactNode> = {
+    institution: <><path d="M4 21h16M6 18h12M7 18V9m5 9V9m5 9V9M5 9h14L12 3 5 9Z" /></>,
+    upload: <><path d="M12 16V4m0 0L7 9m5-5 5 5" /><path d="M5 14v6h14v-6" /></>,
+    cockpit: <><path d="M4 19a8 8 0 1 1 16 0" /><path d="m12 15 4-4M7 19h10" /></>,
+    signal: <><path d="M4 18V9m5 9V5m5 13v-7m5 7V3" /></>,
+    watch: <><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" /><circle cx="12" cy="12" r="2.5" /></>,
+    action: <><path d="M9 5h10v14H5V9" /><path d="m5 5 3 3 5-5" /><path d="M9 13h6m-6 3h5" /></>,
+    board: <><path d="M4 5h16v12H4zM8 21h8m-4-4v4" /><path d="m8 13 2-2 2 1 4-4" /></>,
+    oversight: <><path d="M12 3 4 7v5c0 5 3.4 8 8 9 4.6-1 8-4 8-9V7l-8-4Z" /><path d="m9 12 2 2 4-5" /></>,
+    audit: <><path d="M7 3h8l4 4v14H7z" /><path d="M15 3v5h5M10 12h6m-6 4h6" /></>,
+  };
+
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      {paths[name]}
+    </svg>
+  );
+}
 
 export default function Home() {
   return (
-    <main style={styles.page}>
-      <section style={styles.hero}>
-        <p style={styles.kicker}>KIPROD Risk Management Services</p>
+    <main className="premium-home">
+      <section className="premium-hero">
+        <div className="premium-hero-grid">
+          <div className="premium-hero-copy">
+            <div className="premium-overline">
+              <span className="premium-overline-mark" />
+              KIPROD Executive Risk Intelligence
+            </div>
+            <h1>See risk earlier.<br /><span>Govern action better.</span></h1>
+            <p className="premium-lead">
+              Convert portfolio data into early-warning intelligence, accountable management action and Board-ready oversight.
+            </p>
+            <div className="premium-actions">
+              <Link className="premium-button premium-button-primary" href="/executive-dashboard">
+                Open Executive Cockpit <span aria-hidden="true">↗</span>
+              </Link>
+              <Link className="premium-button premium-button-secondary" href="/portfolio-upload">
+                Upload portfolio data <span aria-hidden="true">→</span>
+              </Link>
+            </div>
+            <div className="premium-trust-line">
+              <span>Built for financial institutions</span>
+              <span>Governance-led</span>
+              <span>Board-ready</span>
+            </div>
+          </div>
 
-        <h1 style={styles.title}>Credit Risk Command Centre</h1>
-
-        <p style={styles.subtitle}>
-          An executive risk intelligence platform that helps financial
-          institutions convert portfolio data into early warning insight,
-          Board-ready reporting, and accountable management action.
-        </p>
-
-        <div style={styles.primaryActions}>
-          <Link style={styles.primaryButton} href="/institution-profile">
-            Start with Institution Profile
-          </Link>
-
-          <Link style={styles.secondaryButton} href="/portfolio-upload">
-            Upload Portfolio
-          </Link>
-
-          <Link style={styles.secondaryButton} href="/executive-dashboard">
-            Open Executive Cockpit
-          </Link>
+          <div className="premium-intelligence-visual" aria-label="Risk intelligence overview">
+            <div className="premium-visual-glow" />
+            <div className="premium-visual-topline">
+              <div>
+                <span>Executive view</span>
+                <strong>Portfolio Intelligence</strong>
+              </div>
+              <span className="premium-live"><i /> Live framework</span>
+            </div>
+            <div className="premium-orbit">
+              <div className="premium-orbit-ring premium-orbit-ring-one" />
+              <div className="premium-orbit-ring premium-orbit-ring-two" />
+              <div className="premium-orbit-core">
+                <small>Risk visibility</small>
+                <strong>360°</strong>
+                <span>Portfolio to Board</span>
+              </div>
+              <span className="premium-orbit-point point-green" />
+              <span className="premium-orbit-point point-amber" />
+              <span className="premium-orbit-point point-red" />
+            </div>
+            <div className="premium-signal-bars" aria-hidden="true">
+              {[28, 42, 36, 58, 51, 72, 64, 86, 78, 92, 84, 100].map((height, index) => (
+                <i key={index} style={{ height: `${height}%` }} />
+              ))}
+            </div>
+            <div className="premium-visual-footer">
+              <span>Detection</span><i />
+              <span>Action</span><i />
+              <span>Oversight</span>
+            </div>
+          </div>
         </div>
-      </section>
 
-      <section style={styles.workflowIntro}>
-        <h2 style={styles.workflowTitle}>Command Centre Workflow</h2>
-        <p style={styles.workflowText}>
-          The platform follows a simple risk governance journey: set up the
-          institution, upload portfolio data, review risk signals, assign
-          management actions, prepare board reporting, and preserve board
-          oversight.
-        </p>
-
-        <div style={styles.workflowGrid}>
-          {workflowSteps.map((step, index) => (
-            <div style={styles.workflowStep} key={step}>
-              <span style={styles.workflowNumber}>{index + 1}</span>
-              <span style={styles.workflowLabel}>{step}</span>
+        <div className="premium-intelligence-strip">
+          <div className="premium-strip-label"><span>Intelligence framework</span><strong>From visibility to accountability</strong></div>
+          {intelligence.map((item) => (
+            <div className="premium-strip-item" key={item.label}>
+              <i className={`tone-${item.tone}`} />
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
             </div>
           ))}
         </div>
       </section>
 
-      <section style={styles.section}>
-        <div style={styles.sectionHeader}>
-          <p style={styles.sectionKicker}>Step 1</p>
-          <h2 style={styles.sectionTitle}>Start Here</h2>
-          <p style={styles.sectionText}>
-            Configure the institution and upload portfolio data before reviewing
-            risk intelligence.
-          </p>
+      <section className="premium-light-section premium-pathway-section">
+        <div className="premium-section-heading">
+          <div>
+            <p className="premium-section-kicker">The institutional journey</p>
+            <h2>Risk intelligence that leads to action.</h2>
+          </div>
+          <p>One connected governance pathway from raw portfolio information to executive decisions, Board oversight and reliable audit evidence.</p>
         </div>
+        <div className="premium-pathway">
+          {pathway.map(([number, title, text]) => (
+            <div className="premium-pathway-step" key={number}>
+              <span>{number}</span>
+              <div><strong>{title}</strong><p>{text}</p></div>
+            </div>
+          ))}
+        </div>
+      </section>
 
-        <div style={styles.navGrid}>
-          <Link style={styles.navCard} href="/institution-profile">
-            <span style={styles.navTitle}>Institution Profile</span>
-            <span style={styles.navText}>
-              Set the institution name, reporting month, risk lead and board
-              oversight context.
-            </span>
+      <section className="premium-modules-section">
+        <div className="premium-section-heading premium-section-heading-dark">
+          <div>
+            <p className="premium-section-kicker">Command Centre capabilities</p>
+            <h2>One platform. A complete governance lens.</h2>
+          </div>
+          <p>Purpose-built workspaces connect risk monitoring, management execution and Board accountability without fragmenting institutional evidence.</p>
+        </div>
+        <div className="premium-module-grid">
+          {modules.map((module) => (
+            <Link className={`premium-module-card${module.featured ? " premium-module-featured" : ""}`} href={module.href} key={module.title}>
+              <span className="premium-module-icon"><ModuleIcon name={module.icon} /></span>
+              <span className="premium-module-content">
+                <small>{module.eyebrow}</small>
+                <strong>{module.title}</strong>
+                <span>{module.text}</span>
+              </span>
+              <span className="premium-module-arrow" aria-hidden="true">↗</span>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="premium-entry-section">
+        <div className="premium-entry-copy">
+          <p className="premium-section-kicker">Begin with trusted data</p>
+          <h2>Set the institutional context.<br />Then activate intelligence.</h2>
+          <p>Configure the reporting environment and validate portfolio data before risk analysis begins.</p>
+        </div>
+        <div className="premium-entry-cards">
+          <Link href="/institution-profile" className="premium-entry-card">
+            <span className="premium-module-icon"><ModuleIcon name="institution" /></span>
+            <span><small>Step 01</small><strong>Institution Profile</strong><em>Set reporting context and governance ownership.</em></span>
+            <b aria-hidden="true">→</b>
           </Link>
-
-          <Link style={styles.navCard} href="/portfolio-upload">
-            <span style={styles.navTitle}>Portfolio Upload</span>
-            <span style={styles.navText}>
-              Upload and validate portfolio data for credit risk classification.
-            </span>
+          <Link href="/portfolio-upload" className="premium-entry-card">
+            <span className="premium-module-icon"><ModuleIcon name="upload" /></span>
+            <span><small>Step 02</small><strong>Portfolio Upload</strong><em>Validate data and prepare risk classification.</em></span>
+            <b aria-hidden="true">→</b>
           </Link>
         </div>
       </section>
 
-      <section style={styles.section}>
-        <div style={styles.sectionHeader}>
-          <p style={styles.sectionKicker}>Step 2</p>
-          <h2 style={styles.sectionTitle}>Management Workspace</h2>
-          <p style={styles.sectionText}>
-            Management reviews risk, monitors early warning accounts, updates
-            actions and prepares board-ready reporting.
-          </p>
-        </div>
-
-        <div style={styles.navGrid}>
-          <Link style={styles.navCard} href="/executive-dashboard">
-            <span style={styles.navTitle}>Executive Cockpit</span>
-            <span style={styles.navText}>
-              View portfolio health, early warning signals, watchlist exposure
-              and risk intelligence summaries.
-            </span>
-          </Link>
-
-          <Link style={styles.navCard} href="/early-warning">
-            <span style={styles.navTitle}>Early Warning</span>
-            <span style={styles.navText}>
-              Review Amber, Red and NPL accounts requiring management attention.
-            </span>
-          </Link>
-
-          <Link style={styles.navCard} href="/watchlist">
-            <span style={styles.navTitle}>Watchlist</span>
-            <span style={styles.navText}>
-              Track risky accounts requiring close monitoring, intervention and
-              follow-up.
-            </span>
-          </Link>
-
-          <Link style={styles.navCard} href="/action-tracker">
-            <span style={styles.navTitle}>Execution Tracker</span>
-            <span style={styles.navText}>
-              Assign officers, due dates, status updates and notes for risky
-              accounts.
-            </span>
-          </Link>
-
-          <Link style={styles.navCard} href="/board-pack">
-            <span style={styles.navTitle}>Board Report</span>
-            <span style={styles.navText}>
-              Prepare executive credit risk summaries for board reporting and
-              oversight.
-            </span>
-          </Link>
-        </div>
-      </section>
-
-      <section style={styles.section}>
-        <div style={styles.sectionHeader}>
-          <p style={styles.sectionKicker}>Step 3</p>
-          <h2 style={styles.sectionTitle}>Governance & Board Oversight</h2>
-          <p style={styles.sectionText}>
-            Board users view accountability gaps, unresolved risks, escalated
-            actions and governance visibility without operational edit rights.
-          </p>
-        </div>
-
-        <div style={styles.navGrid}>
-          <Link style={styles.navCard} href="/role-access">
-            <span style={styles.navTitle}>Role Access</span>
-            <span style={styles.navText}>
-              Define access responsibilities for board, management and KIPROD
-              Admin users.
-            </span>
-          </Link>
-
-          <Link style={styles.navCard} href="/board-oversight">
-            <span style={styles.navTitle}>Board Oversight</span>
-            <span style={styles.navText}>
-              View unresolved risks, overdue actions, escalated items, NPL
-              exposure and accountability gaps.
-            </span>
-          </Link>
-
-          <Link style={styles.navCard} href="/clarification-requests">
-            <span style={styles.navTitle}>Clarification Requests</span>
-            <span style={styles.navText}>
-              Allow board users to request management explanations on unresolved
-              risks, overdue actions, NPL exposure and accountability gaps.
-            </span>
-          </Link>
-
-          <Link style={styles.navCard} href="/audit-history">
-            <span style={styles.navTitle}>Audit History</span>
-            <span style={styles.navText}>
-              Preserve a record of action changes, status updates, officer
-              changes and board clarification requests.
-            </span>
-          </Link>
-        </div>
-      </section>
+      <footer className="premium-home-footer">
+        <span>KIPROD Risk Management Services</span>
+        <strong>Insight <i /> Capability <i /> Execution</strong>
+      </footer>
     </main>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    background:
-      "radial-gradient(circle at top left, rgba(214,168,79,0.16), transparent 32%), linear-gradient(135deg, #05070d 0%, #080b12 45%, #111827 100%)",
-    color: "#f5f0e6",
-    fontFamily: "Manrope, sans-serif",
-    padding: "56px",
-  },
-
-  hero: {
-    maxWidth: "1180px",
-    margin: "0 auto 46px",
-  },
-
-  kicker: {
-    color: "#d6a84f",
-    fontSize: "13px",
-    letterSpacing: "0.16em",
-    textTransform: "uppercase",
-    fontWeight: 800,
-    marginBottom: "18px",
-  },
-
-  title: {
-    fontSize: "58px",
-    lineHeight: 1.05,
-    margin: "0 0 18px",
-    maxWidth: "860px",
-    letterSpacing: "-0.04em",
-  },
-
-  subtitle: {
-    color: "#b7bdc8",
-    fontSize: "20px",
-    lineHeight: 1.65,
-    maxWidth: "840px",
-    marginBottom: "30px",
-  },
-
-  primaryActions: {
-    display: "flex",
-    gap: "14px",
-    flexWrap: "wrap",
-  },
-
-  primaryButton: {
-    background: "#d6a84f",
-    color: "#080b12",
-    textDecoration: "none",
-    borderRadius: "999px",
-    padding: "14px 22px",
-    fontWeight: 900,
-    boxShadow: "0 18px 45px rgba(214,168,79,0.22)",
-  },
-
-  secondaryButton: {
-    background: "rgba(16, 22, 33, 0.88)",
-    color: "#f5f0e6",
-    textDecoration: "none",
-    border: "1px solid rgba(214,168,79,0.3)",
-    borderRadius: "999px",
-    padding: "14px 22px",
-    fontWeight: 800,
-  },
-
-  workflowIntro: {
-    maxWidth: "1180px",
-    margin: "0 auto 28px",
-    background: "rgba(16, 22, 33, 0.72)",
-    border: "1px solid rgba(214,168,79,0.22)",
-    borderRadius: "22px",
-    padding: "26px",
-  },
-
-  workflowTitle: {
-    margin: "0 0 10px",
-    fontSize: "24px",
-  },
-
-  workflowText: {
-    color: "#b7bdc8",
-    fontSize: "16px",
-    lineHeight: 1.65,
-    margin: "0 0 22px",
-    maxWidth: "940px",
-  },
-
-  workflowGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-    gap: "12px",
-  },
-
-  workflowStep: {
-    display: "flex",
-    alignItems: "center",
-    gap: "10px",
-    minHeight: "64px",
-    padding: "12px",
-    background: "rgba(5, 7, 13, 0.56)",
-    border: "1px solid rgba(214,168,79,0.16)",
-    borderRadius: "14px",
-  },
-
-  workflowNumber: {
-    display: "grid",
-    placeItems: "center",
-    flex: "0 0 30px",
-    width: "30px",
-    height: "30px",
-    color: "#080b12",
-    background: "#d6a84f",
-    borderRadius: "999px",
-    fontSize: "12px",
-    fontWeight: 900,
-  },
-
-  workflowLabel: {
-    color: "#f5f0e6",
-    fontSize: "13px",
-    lineHeight: 1.35,
-    fontWeight: 800,
-  },
-
-  section: {
-    maxWidth: "1180px",
-    margin: "0 auto 34px",
-  },
-
-  sectionHeader: {
-    marginBottom: "16px",
-  },
-
-  sectionKicker: {
-    color: "#d6a84f",
-    fontSize: "12px",
-    textTransform: "uppercase",
-    letterSpacing: "0.14em",
-    fontWeight: 900,
-    margin: "0 0 8px",
-  },
-
-  sectionTitle: {
-    fontSize: "30px",
-    margin: "0 0 8px",
-  },
-
-  sectionText: {
-    color: "#b7bdc8",
-    fontSize: "16px",
-    lineHeight: 1.6,
-    margin: 0,
-    maxWidth: "860px",
-  },
-
-  navGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-    gap: "18px",
-  },
-
-  navCard: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "10px",
-    minHeight: "140px",
-    textDecoration: "none",
-    color: "#f5f0e6",
-    background: "rgba(16, 22, 33, 0.88)",
-    border: "1px solid rgba(214,168,79,0.24)",
-    borderRadius: "20px",
-    padding: "24px",
-    boxShadow: "0 20px 60px rgba(0,0,0,0.28)",
-  },
-
-  plannedCard: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "10px",
-    minHeight: "140px",
-    color: "#f5f0e6",
-    background: "rgba(16, 22, 33, 0.45)",
-    border: "1px dashed rgba(214,168,79,0.36)",
-    borderRadius: "20px",
-    padding: "24px",
-    boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
-    opacity: 0.86,
-  },
-
-  badge: {
-    alignSelf: "flex-start",
-    background: "rgba(214,168,79,0.14)",
-    color: "#d6a84f",
-    border: "1px solid rgba(214,168,79,0.28)",
-    borderRadius: "999px",
-    padding: "5px 10px",
-    fontSize: "11px",
-    fontWeight: 900,
-    textTransform: "uppercase",
-    letterSpacing: "0.08em",
-  },
-
-  navTitle: {
-    color: "#ffffff",
-    fontSize: "20px",
-    fontWeight: 900,
-  },
-
-  navText: {
-    color: "#b7bdc8",
-    fontSize: "14px",
-    lineHeight: 1.55,
-  },
-};
