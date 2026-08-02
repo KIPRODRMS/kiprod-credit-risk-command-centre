@@ -67,7 +67,7 @@ export default function PwaInstall() {
       <button
         type="button"
         onClick={install}
-        className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full border border-cyan-300/40 bg-[#0b2035] px-5 py-3 text-sm font-extrabold text-white shadow-2xl shadow-slate-950/30 transition hover:-translate-y-0.5 hover:bg-[#10304c] focus:outline-none focus:ring-4 focus:ring-cyan-300/30"
+        className="pwa-install fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full border border-[#d6a84f]/50 bg-[#071426] px-5 py-3 text-sm font-extrabold text-white shadow-2xl shadow-slate-950/30 transition hover:-translate-y-0.5 hover:bg-[#102b48] focus:outline-none focus:ring-4 focus:ring-[#d6a84f]/25"
         aria-label="Install KIPROD Command Centre"
       >
         <span aria-hidden="true">↓</span>

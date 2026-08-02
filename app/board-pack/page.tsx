@@ -233,8 +233,15 @@ export default function BoardPackPage() {
   );
 
   return (
-    <main className="min-h-screen bg-slate-100 p-4 print:bg-white md:p-6">
+    <main className="board-report min-h-screen bg-slate-100 p-4 print:bg-white md:p-6">
       <section className="mx-auto max-w-6xl">
+        <div className="board-report-masthead mb-6 rounded-2xl bg-[#071426] px-5 py-4 text-white shadow-sm print:rounded-none print:shadow-none">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-[#e1b85f]">KIPROD Risk Management Services</p>
+            <p className="mt-1 text-sm font-semibold text-slate-200">Executive Risk Intelligence Platform</p>
+          </div>
+          <p className="board-report-mark">Board Ready</p>
+        </div>
         <header className="mb-6 flex flex-col justify-between gap-4 print:mb-4 md:flex-row md:items-end">
           <div>
             <p className="text-sm font-semibold uppercase tracking-wide text-amber-600">
