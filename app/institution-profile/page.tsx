@@ -340,9 +340,11 @@ const styles: Record<string, React.CSSProperties> = {
   sectionTitle: {
     margin: "0 0 5px",
     fontSize: "21px",
+    color: "#ffffff",
+    fontWeight: 800,
   },
   sectionDescription: {
-    color: "#8f98a8",
+    color: "#c3ceda",
     margin: 0,
     fontSize: "13px",
     lineHeight: 1.5,

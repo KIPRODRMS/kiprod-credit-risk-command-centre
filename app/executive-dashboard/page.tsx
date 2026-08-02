@@ -18,100 +18,21 @@ type ActionItem = {
 };
 
 const activeModules = [
-  {
-    title: "Portfolio Health",
-    status: "MVP Active",
-    description:
-      "A consolidated view of portfolio exposure, outstanding balance, arrears, PAR indicators, watchlist movement and NPL position.",
-    href: "/dashboard",
-  },
-  {
-    title: "Early Warning Signals",
-    status: "MVP Active",
-    description:
-      "Highlights early deterioration patterns using Amber, Red and NPL classifications so management can act before risk deepens.",
-    href: "/early-warning",
-  },
-  {
-    title: "Watchlist",
-    status: "MVP Active",
-    description:
-      "Focuses management attention on Amber, Red and selected NPL accounts that require monitoring, escalation, intervention or recovery follow-up.",
-    href: "/watchlist",
-  },
-  {
-    title: "Board Report",
-    status: "MVP Active",
-    description:
-      "Converts uploaded portfolio data into a board-ready credit risk summary with key risk indicators and management recommendations.",
-    href: "/board-pack",
-  },
-  {
-    title: "Execution Tracker",
-    status: "MVP Active",
-    description:
-      "Turns identified risks into assigned actions, responsible officers, due dates, follow-up notes and execution status.",
-    href: "/action-tracker",
-  },
+  { title: "Portfolio Health", eyebrow: "Exposure intelligence", href: "/dashboard", description: "Read portfolio quality, arrears and PAR movement." },
+  { title: "Early Warning", eyebrow: "Deterioration signals", href: "/early-warning", description: "Identify stress before risk deepens." },
+  { title: "Watchlist", eyebrow: "Priority accounts", href: "/watchlist", description: "Focus management intervention and recovery." },
+  { title: "Board Intelligence", eyebrow: "Governance visibility", href: "/board-pack", description: "Turn risk position into Board-ready oversight." },
+  { title: "Execution Tracker", eyebrow: "Action accountability", href: "/action-tracker", description: "Track owners, deadlines and escalation." },
 ];
 
-const plannedModules = [
-  {
-    title: "NPL Trend",
-    status: "Phase 3 Planned",
-    description:
-      "Tracks non-performing loan movement over time, including new NPLs, cured accounts, restructures, write-offs and trend direction.",
-  },
-  {
-    title: "Concentration Risk",
-    status: "Phase 3 Planned",
-    description:
-      "Identifies overexposure by employer, product, sector, branch, borrower group or large individual accounts.",
-  },
-  {
-    title: "Sector Exposure",
-    status: "Phase 3 Planned",
-    description:
-      "Shows which economic sectors carry the largest exposure and which sectors are contributing most to arrears or stress.",
-  },
-  {
-    title: "Branch Performance",
-    status: "Phase 4 Planned",
-    description:
-      "Compares branches by portfolio quality, arrears, PAR movement, NPL position, watchlist accounts and recovery follow-up.",
-  },
-  {
-    title: "Recovery Pipeline",
-    status: "Phase 4 Planned",
-    description:
-      "Tracks accounts through recovery stages from early follow-up to restructuring, legal escalation, write-off recommendation and cure.",
-  },
-  {
-    title: "Governance Alerts",
-    status: "AI Layer Later",
-    description:
-      "Flags leadership-level concerns such as overdue actions, large exposure deterioration, policy exceptions, unresolved Board clarification requests and repeated risk deterioration.",
-  },
-];
-
-function statusClass(status: string) {
-  if (status === "MVP Active") {
-    return "bg-green-200 text-green-900";
-  }
-
-  if (status === "Phase 3 Planned") {
-    return "bg-amber-200 text-amber-900";
-  }
-
-  if (status === "Phase 4 Planned") {
-    return "bg-blue-200 text-blue-900";
-  }
-
-  return "bg-purple-200 text-purple-900";
+function formatKes(value: number, compact = false) {
+  if (compact && value >= 1_000_000_000) return `KES ${(value / 1_000_000_000).toFixed(1)}B`;
+  if (compact && value >= 1_000_000) return `KES ${(value / 1_000_000).toFixed(1)}M`;
+  return `KES ${value.toLocaleString("en-KE")}`;
 }
 
-function formatKes(value: number) {
-  return `KES ${value.toLocaleString("en-KE")}`;
+function clamp(value: number) {
+  return Math.max(0, Math.min(100, value));
 }
 
 export default function ExecutiveDashboardPage() {
@@ -127,355 +48,188 @@ export default function ExecutiveDashboardPage() {
       try {
         const parsedRecords = JSON.parse(savedRecords);
         if (Array.isArray(parsedRecords)) {
-          // Browser storage is the MVP data source for this client-only screen.
           // eslint-disable-next-line react-hooks/set-state-in-effect
           setRecords(parsedRecords);
           setDataLoaded(true);
         }
-      } catch {
-        setRecords([]);
-      }
+      } catch { setRecords([]); }
     }
 
     if (savedActions) {
       try {
         const parsedActions = JSON.parse(savedActions);
-        if (Array.isArray(parsedActions)) {
-          setActions(parsedActions);
-        }
-      } catch {
-        setActions([]);
-      }
+        if (Array.isArray(parsedActions)) setActions(parsedActions);
+      } catch { setActions([]); }
     }
   }, []);
 
   const metrics = useMemo(() => {
-    const totalPortfolio = records.reduce(
-      (sum, record) => sum + Number(record.loan_amount || 0),
-      0
-    );
-    const outstandingBalance = records.reduce(
-      (sum, record) => sum + Number(record.outstanding_balance || 0),
-      0
-    );
-    const totalArrears = records.reduce(
-      (sum, record) => sum + Number(record.arrears_amount || 0),
-      0
-    );
-    const watchlistAccounts = records.filter(
-      (record) => record.risk_status !== "Green"
-    ).length;
-    const nplAccounts = records.filter(
-      (record) => record.risk_status === "NPL"
-    ).length;
-    const par30Records = records.filter(
-      (record) => Number(record.days_in_arrears) > 30
-    );
-    const par90Records = records.filter(
-      (record) => Number(record.days_in_arrears) > 90
-    );
-    const par30Balance = par30Records.reduce(
-      (sum, record) => sum + Number(record.outstanding_balance || 0),
-      0
-    );
-    const par90Balance = par90Records.reduce(
-      (sum, record) => sum + Number(record.outstanding_balance || 0),
-      0
-    );
+    const totalPortfolio = records.reduce((sum, r) => sum + Number(r.loan_amount || 0), 0);
+    const outstandingBalance = records.reduce((sum, r) => sum + Number(r.outstanding_balance || 0), 0);
+    const totalArrears = records.reduce((sum, r) => sum + Number(r.arrears_amount || 0), 0);
+    const count = (status: RiskStatus) => records.filter((r) => r.risk_status === status).length;
+    const parBalance = (days: number) => records
+      .filter((r) => Number(r.days_in_arrears) > days)
+      .reduce((sum, r) => sum + Number(r.outstanding_balance || 0), 0);
+    const parAccounts = (days: number) => records.filter((r) => Number(r.days_in_arrears) > days).length;
     const today = new Date().toISOString().slice(0, 10);
-    const managementActionsDue = actions.filter(
-      (action) =>
-        action.status !== "Completed" &&
-        Boolean(action.due_date) &&
-        action.due_date <= today
-    ).length;
+    const actionsDue = actions.filter((a) => a.status !== "Completed" && a.due_date && a.due_date <= today).length;
+    const risk = { Green: count("Green"), Amber: count("Amber"), Red: count("Red"), NPL: count("NPL") };
+    const performingRate = records.length ? (risk.Green / records.length) * 100 : 0;
+    const arrearsRate = outstandingBalance ? (totalArrears / outstandingBalance) * 100 : 0;
 
     return {
-      totalPortfolio,
-      outstandingBalance,
-      totalArrears,
-      watchlistAccounts,
-      nplAccounts,
-      par30Accounts: par30Records.length,
-      par90Accounts: par90Records.length,
-      par30:
-        outstandingBalance > 0 ? (par30Balance / outstandingBalance) * 100 : 0,
-      par90:
-        outstandingBalance > 0 ? (par90Balance / outstandingBalance) * 100 : 0,
-      managementActionsDue,
+      totalPortfolio, outstandingBalance, totalArrears, actionsDue, risk,
+      watchlist: risk.Amber + risk.Red + risk.NPL,
+      par30: outstandingBalance ? (parBalance(30) / outstandingBalance) * 100 : 0,
+      par90: outstandingBalance ? (parBalance(90) / outstandingBalance) * 100 : 0,
+      par30Accounts: parAccounts(30), par90Accounts: parAccounts(90),
+      performingRate, arrearsRate,
     };
   }, [actions, records]);
 
-  const summaryCards = [
-    {
-      label: "Total Portfolio",
-      value: formatKes(metrics.totalPortfolio),
-      tone: "text-slate-950",
-    },
-    {
-      label: "Outstanding Balance",
-      value: formatKes(metrics.outstandingBalance),
-      tone: "text-slate-950",
-    },
-    {
-      label: "Total Arrears",
-      value: formatKes(metrics.totalArrears),
-      tone: "text-red-600",
-    },
-    {
-      label: "Watchlist Accounts",
-      value: String(metrics.watchlistAccounts),
-      tone: "text-amber-600",
-    },
-    {
-      label: "NPL Accounts",
-      value: String(metrics.nplAccounts),
-      tone: "text-red-700",
-    },
-    {
-      label: "PAR 30",
-      value: `${metrics.par30.toFixed(1)}%`,
-      detail: `${metrics.par30Accounts} accounts`,
-      tone: "text-red-600",
-    },
-    {
-      label: "PAR 90",
-      value: `${metrics.par90.toFixed(1)}%`,
-      detail: `${metrics.par90Accounts} accounts`,
-      tone: "text-red-700",
-    },
-    {
-      label: "Management Actions Due",
-      value: String(metrics.managementActionsDue),
-      tone: "text-amber-700",
-    },
-  ];
+  const riskTotal = Math.max(records.length, 1);
+  const riskRows = (["Green", "Amber", "Red", "NPL"] as RiskStatus[]).map((status) => ({
+    status,
+    value: metrics.risk[status],
+    percent: (metrics.risk[status] / riskTotal) * 100,
+  }));
+
+  const healthScore = dataLoaded
+    ? Math.round(clamp(100 - metrics.par30 * 1.15 - metrics.arrearsRate * 0.45 - metrics.actionsDue * 1.5))
+    : 0;
+  const attentionCount = metrics.risk.Red + metrics.risk.NPL + metrics.actionsDue;
 
   return (
-    <main className="min-h-screen bg-slate-100 p-6">
-      <section className="mx-auto max-w-7xl">
-        <div className="mb-8 rounded-3xl bg-slate-950 p-8 text-white shadow-sm">
-          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-400">
-            KIPROD Credit Risk Command Centre
-          </p>
-
-          <h1 className="mt-4 text-4xl font-bold tracking-tight md:text-5xl">
-            Executive Risk Cockpit
-          </h1>
-
-          <h2 className="mt-4 text-2xl font-semibold text-slate-100">
-            From dashboard reporting to executive risk intelligence
-          </h2>
-
-          <p className="mt-5 max-w-5xl leading-8 text-slate-300">
-            The Executive Cockpit is the central control room for portfolio
-            visibility, early warning insight, board reporting and management
-            execution. It gives senior management, credit teams, risk teams,
-            recovery teams and board-facing users one structured view of what is
-            active now and what intelligence layers are planned next.
-          </p>
-        </div>
-
-        <div className="mb-8">
-          <div className="mb-4">
-            <p className="text-sm font-semibold uppercase tracking-wide text-amber-600">
-              Current Portfolio Position
-            </p>
-            <h2 className="text-2xl font-bold text-slate-950">
-              Executive Summary
-            </h2>
-          </div>
-
-          {!dataLoaded ? (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6">
-              <h3 className="text-lg font-bold text-slate-950">
-                No portfolio data uploaded yet
-              </h3>
-              <p className="mt-2 text-slate-700">
-                Upload and validate the institution portfolio to activate live
-                risk metrics, management interpretation and action monitoring.
-              </p>
-              <a
-                href="/portfolio-upload"
-                className="mt-5 inline-block rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white"
-              >
-                Upload Portfolio
-              </a>
+    <main className="cockpit-page">
+      <section className="cockpit-shell">
+        <header className="cockpit-hero">
+          <div className="cockpit-hero-copy">
+            <p className="cockpit-kicker"><i /> KIPROD Executive Intelligence</p>
+            <h1>Executive Risk Cockpit</h1>
+            <p>One institutional view of portfolio health, emerging risk, management response and Board accountability.</p>
+            <div className="cockpit-hero-actions">
+              <a href="/portfolio-upload" className="cockpit-primary-action">Refresh portfolio <span>↗</span></a>
+              <a href="/board-pack" className="cockpit-secondary-action">Open Board Pack</a>
             </div>
-          ) : (
-            <>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {summaryCards.map((card) => (
-                  <div
-                    key={card.label}
-                    className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-                  >
-                    <p className="text-sm font-medium text-slate-500">
-                      {card.label}
-                    </p>
-                    <h3
-                      className={`mt-2 break-words text-2xl font-bold ${card.tone}`}
-                    >
-                      {card.value}
-                    </h3>
-                    {card.detail ? (
-                      <p className="mt-1 text-xs font-medium text-slate-500">
-                        {card.detail}
-                      </p>
-                    ) : null}
-                  </div>
-                ))}
+          </div>
+          <div className="cockpit-command-status">
+            <span><i className={dataLoaded ? "is-live" : ""} /> Intelligence status</span>
+            <strong>{dataLoaded ? "Portfolio live" : "Awaiting portfolio"}</strong>
+            <small>{records.length} accounts under monitoring</small>
+          </div>
+        </header>
+
+        {!dataLoaded ? (
+          <section className="cockpit-empty-state">
+            <div className="cockpit-empty-signal"><span /><span /><span /></div>
+            <div>
+              <p>Intelligence activation</p>
+              <h2>Your executive view is ready for portfolio data.</h2>
+              <span>Upload and validate an institutional portfolio to activate live exposure, risk distribution, PAR and action-accountability intelligence.</span>
+            </div>
+            <a href="/portfolio-upload">Activate cockpit <b>→</b></a>
+          </section>
+        ) : null}
+
+        <section className="cockpit-command-grid" aria-label="Executive portfolio overview">
+          <article className="cockpit-health-panel">
+            <div className="cockpit-panel-heading">
+              <div><span>Portfolio condition</span><h2>Health signal</h2></div>
+              <em className={healthScore >= 70 ? "signal-good" : healthScore >= 45 ? "signal-watch" : "signal-high"}>
+                {healthScore >= 70 ? "Performing" : healthScore >= 45 ? "Watch closely" : "Intervention"}
+              </em>
+            </div>
+            <div className="cockpit-health-body">
+              <div className="cockpit-health-ring" style={{ "--health": `${healthScore * 3.6}deg` } as React.CSSProperties}>
+                <div><strong>{healthScore}</strong><span>/ 100</span><small>Health index</small></div>
               </div>
-
-              <div className="mt-5 rounded-2xl border-l-4 border-amber-400 bg-white p-6 shadow-sm">
-                <p className="text-sm font-semibold uppercase tracking-wide text-amber-600">
-                  Management Interpretation
-                </p>
-                <p className="mt-3 leading-7 text-slate-700">
-                  The current portfolio position shows early warning stress
-                  across selected accounts. Management should prioritize Red
-                  and NPL accounts, review risky employers and branches, and
-                  ensure all overdue actions are assigned in the Execution
-                  Tracker.
-                </p>
+              <div className="cockpit-health-notes">
+                <div><span>Performing portfolio</span><strong>{metrics.performingRate.toFixed(1)}%</strong></div>
+                <div><span>PAR 30 exposure</span><strong className="risk-amber-text">{metrics.par30.toFixed(1)}%</strong></div>
+                <div><span>PAR 90 exposure</span><strong className="risk-red-text">{metrics.par90.toFixed(1)}%</strong></div>
               </div>
-            </>
-          )}
-        </div>
+            </div>
+          </article>
 
-        <div className="mb-8 grid gap-4 md:grid-cols-4">
-          <div className="rounded-2xl bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">Active MVP Modules</p>
-            <h3 className="mt-2 text-3xl font-bold text-slate-950">
-              {activeModules.length}
-            </h3>
-          </div>
+          <article className="cockpit-exposure-panel">
+            <div className="cockpit-panel-heading">
+              <div><span>Live position</span><h2>Portfolio exposure</h2></div>
+              <small>Current cycle</small>
+            </div>
+            <strong className="cockpit-exposure-value">{formatKes(metrics.outstandingBalance, true)}</strong>
+            <p>Outstanding balance across {records.length} monitored accounts</p>
+            <div className="cockpit-exposure-scale">
+              <i style={{ width: `${clamp(metrics.performingRate)}%` }} />
+              <span>Performing {metrics.performingRate.toFixed(1)}%</span>
+            </div>
+            <div className="cockpit-exposure-footer">
+              <div><span>Total portfolio</span><strong>{formatKes(metrics.totalPortfolio, true)}</strong></div>
+              <div><span>Total arrears</span><strong>{formatKes(metrics.totalArrears, true)}</strong></div>
+            </div>
+          </article>
 
-          <div className="rounded-2xl bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">Planned Modules</p>
-            <h3 className="mt-2 text-3xl font-bold text-amber-600">
-              {plannedModules.length}
-            </h3>
-          </div>
+          <article className="cockpit-attention-panel">
+            <div className="cockpit-panel-heading cockpit-panel-heading-dark">
+              <div><span>Governance priority</span><h2>Board attention</h2></div>
+              <em>{attentionCount}</em>
+            </div>
+            <div className="cockpit-attention-list">
+              <a href="/early-warning"><span className="attention-red" /><div><strong>{metrics.risk.Red} high-risk accounts</strong><small>Require management escalation</small></div><b>→</b></a>
+              <a href="/watchlist"><span className="attention-npl" /><div><strong>{metrics.risk.NPL} NPL accounts</strong><small>Require recovery attention</small></div><b>→</b></a>
+              <a href="/action-tracker"><span className="attention-gold" /><div><strong>{metrics.actionsDue} actions due</strong><small>Require accountability follow-up</small></div><b>→</b></a>
+            </div>
+          </article>
+        </section>
 
-          <div className="rounded-2xl bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">Core Workflow</p>
-            <h3 className="mt-2 text-xl font-bold text-slate-950">
-              Upload → Insight → Action
-            </h3>
-          </div>
+        <section className="cockpit-kpi-grid">
+          <article><span>Outstanding balance</span><strong>{formatKes(metrics.outstandingBalance, true)}</strong><small>Live exposure</small></article>
+          <article><span>Watchlist accounts</span><strong className="risk-amber-text">{metrics.watchlist}</strong><small>Amber, Red and NPL</small></article>
+          <article><span>PAR 30</span><strong className="risk-red-text">{metrics.par30.toFixed(1)}%</strong><small>{metrics.par30Accounts} accounts</small></article>
+          <article><span>PAR 90</span><strong className="risk-npl-text">{metrics.par90.toFixed(1)}%</strong><small>{metrics.par90Accounts} accounts</small></article>
+          <article><span>Actions due</span><strong className="risk-amber-text">{metrics.actionsDue}</strong><small>Management follow-up</small></article>
+        </section>
 
-          <div className="rounded-2xl bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">Next Priority</p>
-            <h3 className="mt-2 text-xl font-bold text-slate-950">
-              Portfolio Upload Logic
-            </h3>
-          </div>
-        </div>
-
-        <div className="mb-10">
-          <div className="mb-4">
-            <p className="text-sm font-semibold uppercase tracking-wide text-green-700">
-              Active Control Room
-            </p>
-
-            <h2 className="text-2xl font-bold text-slate-950">
-              MVP Active Modules
-            </h2>
-
-            <p className="mt-2 max-w-4xl text-slate-600">
-              These modules form the current working cockpit and support the
-              Phase 1 user journey from uploaded portfolio data to executive
-              visibility, board reporting and management execution.
-            </p>
-          </div>
-
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-            {activeModules.map((module) => (
-              <div
-                key={module.title}
-                className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <h3 className="text-xl font-bold text-slate-950">
-                    {module.title}
-                  </h3>
-
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass(
-                      module.status
-                    )}`}
-                  >
-                    {module.status}
-                  </span>
+        <section className="cockpit-insight-grid">
+          <article className="cockpit-risk-panel">
+            <div className="cockpit-panel-heading">
+              <div><span>Risk architecture</span><h2>Account distribution</h2></div>
+              <small>{records.length} total</small>
+            </div>
+            <div className="cockpit-risk-list">
+              {riskRows.map((row) => (
+                <div key={row.status}>
+                  <span className={`risk-dot risk-dot-${row.status.toLowerCase()}`} />
+                  <strong>{row.status}</strong>
+                  <div><i className={`risk-fill risk-fill-${row.status.toLowerCase()}`} style={{ width: `${row.percent}%` }} /></div>
+                  <b>{row.value}</b><small>{row.percent.toFixed(0)}%</small>
                 </div>
+              ))}
+            </div>
+          </article>
 
-                <p className="mt-4 leading-7 text-slate-600">
-                  {module.description}
-                </p>
+          <article className="cockpit-interpretation">
+            <p>Executive interpretation</p>
+            <h2>{attentionCount > 0 ? "Risk signals require coordinated management action." : "Portfolio controls are positioned for active monitoring."}</h2>
+            <span>
+              {dataLoaded
+                ? `Prioritise ${metrics.risk.Red + metrics.risk.NPL} Red and NPL accounts, maintain visibility over ${metrics.risk.Amber} early-warning accounts, and close ${metrics.actionsDue} overdue management actions.`
+                : "Once data is uploaded, KIPROD will translate the portfolio position into a structured management and governance narrative."}
+            </span>
+            <a href="/action-tracker">Review management execution <b>→</b></a>
+          </article>
+        </section>
 
-                <a
-                  href={module.href}
-                  className="mt-6 inline-block rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white"
-                >
-                  Open Module
-                </a>
-              </div>
+        <section className="cockpit-modules-section">
+          <div className="cockpit-section-title"><div><p>Control room</p><h2>Move from signal to accountable action.</h2></div><span>Five connected intelligence modules</span></div>
+          <div className="cockpit-module-grid">
+            {activeModules.map((module, index) => (
+              <a href={module.href} key={module.title} style={{ "--module-order": index } as React.CSSProperties}>
+                <span>0{index + 1}</span><small>{module.eyebrow}</small><strong>{module.title}</strong><p>{module.description}</p><b>Open module ↗</b>
+              </a>
             ))}
           </div>
-        </div>
-
-        <div>
-          <div className="mb-4">
-            <p className="text-sm font-semibold uppercase tracking-wide text-amber-600">
-              Roadmap Intelligence Layer
-            </p>
-
-            <h2 className="text-2xl font-bold text-slate-950">
-              Planned Modules
-            </h2>
-
-            <p className="mt-2 max-w-4xl text-slate-600">
-              These modules extend the platform from current MVP visibility into
-              deeper portfolio analytics, institutional performance monitoring
-              and governance-level intelligence.
-            </p>
-          </div>
-
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-            {plannedModules.map((module) => (
-              <div
-                key={module.title}
-                className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 shadow-sm"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <h3 className="text-xl font-bold text-slate-950">
-                    {module.title}
-                  </h3>
-
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass(
-                      module.status
-                    )}`}
-                  >
-                    {module.status}
-                  </span>
-                </div>
-
-                <p className="mt-4 leading-7 text-slate-600">
-                  {module.description}
-                </p>
-
-                <button
-                  disabled
-                  className="mt-6 rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-400"
-                >
-                  Planned Module
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
+        </section>
       </section>
     </main>
   );
