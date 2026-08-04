@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Pagination from "../components/Pagination";
+import RegisterSearch from "../components/RegisterSearch";
 
 type RiskStatus = "Green" | "Amber" | "Red" | "NPL";
 type RiskFilter =
@@ -112,6 +114,9 @@ function riskBadgeClass(status: RiskStatus) {
 export default function EarlyWarningPage() {
   const [records, setRecords] = useState<LoanRecord[]>([]);
   const [activeFilter, setActiveFilter] = useState<RiskFilter>("All");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   useEffect(() => {
     const loadRecords = window.setTimeout(() => {
@@ -155,18 +160,25 @@ export default function EarlyWarningPage() {
   }, [riskyRecords]);
 
   const filteredRecords = useMemo(() => {
-    if (activeFilter === "All") return riskyRecords;
+    let categoryRecords: LoanRecord[] = riskyRecords;
     if (activeFilter === "Restructured") {
-      return riskyRecords.filter(isRestructured);
+      categoryRecords = riskyRecords.filter(isRestructured);
+    } else if (activeFilter === "High Exposure") {
+      categoryRecords = riskyRecords.filter((record) => hasFlag(record, "High Exposure"));
+    } else if (activeFilter !== "All") {
+      categoryRecords = riskyRecords.filter((record) => record.risk_status === activeFilter);
     }
-    if (activeFilter === "High Exposure") {
-      return riskyRecords.filter((record) => hasFlag(record, "High Exposure"));
-    }
-
-    return riskyRecords.filter(
-      (record) => record.risk_status === activeFilter
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return categoryRecords;
+    return categoryRecords.filter((record) =>
+      [record.member_name, record.member_number, record.loan_account, record.branch,
+        record.employer, record.sector, record.loan_product, record.responsible_officer,
+        record.risk_status, ...(record.risk_flags || [])]
+        .some((value) => String(value || "").toLowerCase().includes(query))
     );
-  }, [activeFilter, riskyRecords]);
+  }, [activeFilter, riskyRecords, searchQuery]);
+  useEffect(() => setPage(1), [activeFilter, searchQuery]);
+  const paginatedRecords = filteredRecords.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <main className="min-h-screen bg-slate-100 p-6">
@@ -237,31 +249,31 @@ export default function EarlyWarningPage() {
               </h2>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
                 <div className="rounded-2xl bg-white p-5 shadow-sm">
-                  <p className="text-sm text-slate-500">Amber Accounts</p>
+                  <p className="text-sm font-semibold text-slate-800">Amber Accounts</p>
                   <p className="mt-2 text-2xl font-bold text-amber-600">
                     {summary.amber}
                   </p>
                 </div>
                 <div className="rounded-2xl bg-white p-5 shadow-sm">
-                  <p className="text-sm text-slate-500">Red Accounts</p>
+                  <p className="text-sm font-semibold text-slate-800">Red Accounts</p>
                   <p className="mt-2 text-2xl font-bold text-red-600">
                     {summary.red}
                   </p>
                 </div>
                 <div className="rounded-2xl bg-white p-5 shadow-sm">
-                  <p className="text-sm text-slate-500">NPL Accounts</p>
+                  <p className="text-sm font-semibold text-slate-800">NPL Accounts</p>
                   <p className="mt-2 text-2xl font-bold text-red-700">
                     {summary.npl}
                   </p>
                 </div>
                 <div className="rounded-2xl bg-white p-5 shadow-sm">
-                  <p className="text-sm text-slate-500">Total Arrears</p>
+                  <p className="text-sm font-semibold text-slate-800">Total Arrears</p>
                   <p className="mt-2 text-xl font-bold text-slate-950">
                     {formatKes(summary.arrears)}
                   </p>
                 </div>
                 <div className="rounded-2xl bg-white p-5 shadow-sm">
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm font-semibold text-slate-800">
                     Total Exposure at Risk
                   </p>
                   <p className="mt-2 text-xl font-bold text-slate-950">
@@ -269,7 +281,7 @@ export default function EarlyWarningPage() {
                   </p>
                 </div>
                 <div className="rounded-2xl bg-white p-5 shadow-sm">
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm font-semibold text-slate-800">
                     Restructured Risk Accounts
                   </p>
                   <p className="mt-2 text-2xl font-bold text-violet-700">
@@ -331,6 +343,9 @@ export default function EarlyWarningPage() {
                   </button>
                 ))}
               </div>
+              <div className="mt-4">
+                <RegisterSearch value={searchQuery} onChange={setSearchQuery} resultCount={filteredRecords.length} placeholder="Search member, loan account, branch, officer, product or sector..." />
+              </div>
             </section>
 
             <section className="mt-6 rounded-2xl bg-white p-6 shadow-sm">
@@ -346,8 +361,8 @@ export default function EarlyWarningPage() {
                 <div className="mt-5 overflow-x-auto">
                   <table className="w-full min-w-[1900px] text-left text-sm">
                     <thead>
-                      <tr className="border-b text-slate-500">
-                        <th className="py-3 pr-4">Member Name</th>
+                      <tr className="border-b border-slate-300 bg-slate-950 text-white">
+                        <th className="py-3 pl-3 pr-4 text-white">Member Name</th>
                         <th className="py-3 pr-4">Member Number</th>
                         <th className="py-3 pr-4">Loan Account</th>
                         <th className="py-3 pr-4">Branch</th>
@@ -364,7 +379,7 @@ export default function EarlyWarningPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredRecords.map((record) => (
+                      {paginatedRecords.map((record) => (
                         <tr
                           key={record.loan_account}
                           className="border-b align-top"
@@ -423,6 +438,7 @@ export default function EarlyWarningPage() {
                   </table>
                 </div>
               )}
+              <Pagination page={page} pageSize={pageSize} totalItems={filteredRecords.length} onPageChange={setPage} />
             </section>
           </>
         )}

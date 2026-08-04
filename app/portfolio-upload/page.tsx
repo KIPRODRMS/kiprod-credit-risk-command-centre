@@ -22,6 +22,19 @@ type LoanRecord = {
   risk_status: RiskStatus;
 };
 
+type AuditLog = {
+  id: string;
+  createdAt: string;
+  module: string;
+  actionType: string;
+  recordRef: string;
+  oldValue: string;
+  newValue: string;
+  role: string;
+  user: string;
+  note: string;
+};
+
 const requiredColumns = [
   "member_name",
   "member_number",
@@ -170,8 +183,61 @@ function buildLoanRecords(rows: Record<string, string>[]): LoanRecord[] {
   });
 }
 
+function writePortfolioUploadAudit(
+  records: LoanRecord[],
+  sourceName: string,
+  riskCounts: { green: number; amber: number; red: number; npl: number }
+) {
+  let logs: AuditLog[] = [];
+
+  try {
+    const storedLogs = JSON.parse(
+      localStorage.getItem("kiprodAuditLogs") || "[]"
+    );
+    logs = Array.isArray(storedLogs) ? storedLogs : [];
+  } catch {
+    logs = [];
+  }
+
+  const totalPortfolio = records.reduce(
+    (sum, record) => sum + record.loan_amount,
+    0
+  );
+  const outstandingBalance = records.reduce(
+    (sum, record) => sum + record.outstanding_balance,
+    0
+  );
+  const totalArrears = records.reduce(
+    (sum, record) => sum + record.arrears_amount,
+    0
+  );
+  const role = localStorage.getItem("kiprodCurrentRole") || "MVP User";
+  const timestamp = new Date().toISOString();
+  const log: AuditLog = {
+    id: `audit-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    createdAt: timestamp,
+    module: "Portfolio Upload",
+    actionType: "PORTFOLIO_UPLOADED",
+    recordRef: sourceName,
+    oldValue: "No active portfolio",
+    newValue: `${records.length} accounts processed successfully`,
+    role,
+    user: role,
+    note:
+      `Successful portfolio upload. Records: ${records.length}; ` +
+      `Total portfolio: KES ${totalPortfolio.toLocaleString()}; ` +
+      `Outstanding: KES ${outstandingBalance.toLocaleString()}; ` +
+      `Arrears: KES ${totalArrears.toLocaleString()}; ` +
+      `Green: ${riskCounts.green}; Amber: ${riskCounts.amber}; ` +
+      `Red: ${riskCounts.red}; NPL: ${riskCounts.npl}.`,
+  };
+
+  localStorage.setItem("kiprodAuditLogs", JSON.stringify([log, ...logs]));
+}
+
 export default function PortfolioUploadPage() {
   const [csvText, setCsvText] = useState(sampleCsv);
+  const [sourceName, setSourceName] = useState("Pasted portfolio data");
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessages, setErrorMessages] = useState<string[]>([]);
 
@@ -211,6 +277,15 @@ export default function PortfolioUploadPage() {
       (record) => record.risk_status !== "Green"
     ).length;
 
+    const greenCount = records.length - watchlistCount;
+
+    writePortfolioUploadAudit(records, sourceName, {
+      green: greenCount,
+      amber: amberCount,
+      red: redCount,
+      npl: nplCount,
+    });
+
     setSuccessMessage(
       `Portfolio saved successfully. ${records.length} loan accounts processed. Risk classification completed. Amber: ${amberCount}, Red: ${redCount}, NPL: ${nplCount}, Watchlist: ${watchlistCount}. Executive Cockpit, Early Warning Register, Watchlist, Board Report, and Execution Tracker have been updated.`
     );
@@ -228,6 +303,7 @@ export default function PortfolioUploadPage() {
 
       if (typeof text === "string") {
         setCsvText(text);
+        setSourceName(file.name);
         setSuccessMessage("");
         setErrorMessages([]);
       }

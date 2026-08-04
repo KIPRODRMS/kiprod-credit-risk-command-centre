@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Pagination from "../components/Pagination";
+import RegisterSearch from "../components/RegisterSearch";
 
 type RiskStatus = "Green" | "Amber" | "Red" | "NPL";
 type WatchlistFilter =
@@ -123,6 +125,9 @@ export default function WatchlistPage() {
   const [records, setRecords] = useState<LoanRecord[]>([]);
   const [actions, setActions] = useState<ActionItem[]>([]);
   const [activeFilter, setActiveFilter] = useState<WatchlistFilter>("All");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 25;
 
   useEffect(() => {
     const loadData = window.setTimeout(() => {
@@ -198,21 +203,27 @@ export default function WatchlistPage() {
   }, [watchlistRecords]);
 
   const filteredRecords = useMemo(() => {
-    if (activeFilter === "All") return watchlistRecords;
+    let categoryRecords: WatchlistRecord[] = watchlistRecords;
     if (activeFilter === "Restructured") {
-      return watchlistRecords.filter(isRestructured);
+      categoryRecords = watchlistRecords.filter(isRestructured);
+    } else if (activeFilter === "High Exposure") {
+      categoryRecords = watchlistRecords.filter(isHighExposure);
+    } else if (activeFilter === "Overdue") {
+      categoryRecords = watchlistRecords.filter((record) => record.overdue);
+    } else if (activeFilter !== "All") {
+      categoryRecords = watchlistRecords.filter((record) => record.risk_status === activeFilter);
     }
-    if (activeFilter === "High Exposure") {
-      return watchlistRecords.filter(isHighExposure);
-    }
-    if (activeFilter === "Overdue") {
-      return watchlistRecords.filter((record) => record.overdue);
-    }
-
-    return watchlistRecords.filter(
-      (record) => record.risk_status === activeFilter
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return categoryRecords;
+    return categoryRecords.filter((record) =>
+      [record.member_name, record.member_number, record.loan_account, record.branch,
+        record.employer, record.sector, record.loan_product, record.responsible_officer,
+        record.risk_status, record.reason, record.operationalStatus, record.escalationLevel]
+        .some((value) => String(value || "").toLowerCase().includes(query))
     );
-  }, [activeFilter, watchlistRecords]);
+  }, [activeFilter, watchlistRecords, searchQuery]);
+  useEffect(() => setPage(1), [activeFilter, searchQuery]);
+  const paginatedRecords = filteredRecords.slice((page - 1) * pageSize, page * pageSize);
 
   const summaryCards = [
     { label: "Total Watchlist Accounts", value: summary.total },
@@ -312,7 +323,7 @@ export default function WatchlistPage() {
                   key={card.label}
                   className="rounded-2xl bg-white p-5 shadow-sm"
                 >
-                  <p className="text-sm text-slate-500">{card.label}</p>
+                  <p className="text-sm font-semibold text-slate-800">{card.label}</p>
                   <h2
                     className={`mt-2 text-2xl font-bold ${
                       card.tone ?? "text-slate-950"
@@ -344,6 +355,9 @@ export default function WatchlistPage() {
                   </button>
                 ))}
               </div>
+              <div className="mt-4">
+                <RegisterSearch value={searchQuery} onChange={setSearchQuery} resultCount={filteredRecords.length} placeholder="Search member, loan account, branch, officer, product or status..." />
+              </div>
             </div>
 
             <div className="mt-6 rounded-2xl bg-white p-6 shadow-sm">
@@ -352,24 +366,24 @@ export default function WatchlistPage() {
                   <h2 className="text-xl font-bold text-slate-950">
                     Watchlist Register
                   </h2>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-sm font-semibold text-slate-800">
                     {filteredRecords.length} account
                     {filteredRecords.length === 1 ? "" : "s"} shown
                   </p>
                 </div>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm font-medium text-slate-800">
                   Statuses: New · Under Review · Contacted · Intervention Agreed
                   · Escalated · Moved to Recovery · Closed
                 </p>
               </div>
 
-              <p className="mt-5 text-xs font-semibold text-slate-500">
+              <p className="mt-5 text-sm font-semibold text-slate-800">
                 Scroll sideways inside the register to view all 15 columns →
               </p>
               <div className="mt-2 overflow-x-scroll pb-4 [scrollbar-gutter:stable]">
                 <table className="w-full min-w-[2100px] text-left text-sm">
                   <thead>
-                    <tr className="border-b text-slate-500">
+                    <tr className="border-b border-slate-300 bg-slate-950 text-white">
                       <th className="py-3 pr-5">Member Name</th>
                       <th className="py-3 pr-5">Loan Account</th>
                       <th className="py-3 pr-5">Branch</th>
@@ -389,7 +403,7 @@ export default function WatchlistPage() {
                   </thead>
 
                   <tbody>
-                    {filteredRecords.map((record) => (
+                    {paginatedRecords.map((record) => (
                       <tr
                         key={record.loan_account}
                         className={`border-b align-top ${
@@ -469,6 +483,7 @@ export default function WatchlistPage() {
                   </div>
                 )}
               </div>
+              <Pagination page={page} pageSize={pageSize} totalItems={filteredRecords.length} onPageChange={setPage} />
             </div>
           </>
         )}

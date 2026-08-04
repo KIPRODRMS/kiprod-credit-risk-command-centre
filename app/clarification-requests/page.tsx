@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import Pagination from "../components/Pagination";
+import RegisterSearch from "../components/RegisterSearch";
 
 type ClarificationStatus =
   | "Pending Management Response"
@@ -184,6 +186,9 @@ export default function ClarificationRequestsPage() {
   const [form, setForm] = useState(emptyForm);
   const role = useSyncExternalStore(subscribeToRole, currentRole, () => "MVP User");
   const [filter, setFilter] = useState("All");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
   const [loading, setLoading] = useState(Boolean(institutionId()));
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(
@@ -258,13 +263,21 @@ export default function ClarificationRequestsPage() {
     [normalizedRequests]
   );
 
-  const filtered = useMemo(
-    () =>
-      filter === "All"
-        ? normalizedRequests
-        : normalizedRequests.filter((item) => item.status === filter),
-    [filter, normalizedRequests]
-  );
+  const filtered = useMemo(() => {
+    const statusMatches = filter === "All"
+      ? normalizedRequests
+      : normalizedRequests.filter((item) => item.status === filter);
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return statusMatches;
+    return statusMatches.filter((item) =>
+      [item.request_title, item.loan_account, item.member_name, item.issue_type,
+        item.assigned_to, item.status, item.question, item.management_response,
+        item.board_review_notes]
+        .some((value) => String(value || "").toLowerCase().includes(query))
+    );
+  }, [filter, normalizedRequests, searchQuery]);
+  useEffect(() => setPage(1), [filter, searchQuery]);
+  const paginatedRequests = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const selected =
     normalizedRequests.find((item) => item.id === selectedId) || filtered[0] || null;
@@ -586,6 +599,10 @@ export default function ClarificationRequestsPage() {
               </select>
             </div>
 
+            <div className="mt-4">
+              <RegisterSearch value={searchQuery} onChange={setSearchQuery} resultCount={filtered.length} placeholder="Search request, account, member, issue or assignee..." />
+            </div>
+
             <div className="mt-5 grid max-h-[760px] gap-3 overflow-y-auto pr-1">
               {loading ? (
                 <p className="py-8 text-center text-sm text-slate-600">
@@ -596,7 +613,7 @@ export default function ClarificationRequestsPage() {
                   No clarification requests found.
                 </p>
               ) : (
-                filtered.map((request) => (
+                paginatedRequests.map((request) => (
                   <button
                     type="button"
                     key={request.id}
@@ -633,6 +650,7 @@ export default function ClarificationRequestsPage() {
                 ))
               )}
             </div>
+            <Pagination page={page} pageSize={pageSize} totalItems={filtered.length} onPageChange={setPage} />
           </aside>
 
           <section className="min-w-0 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">

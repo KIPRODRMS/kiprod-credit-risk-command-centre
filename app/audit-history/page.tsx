@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Pagination from "../components/Pagination";
+import RegisterSearch from "../components/RegisterSearch";
 
 type AuditLog = {
   id: string;
@@ -71,6 +73,9 @@ export default function AuditHistoryPage() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [filterModule, setFilterModule] = useState("All");
   const [filterAction, setFilterAction] = useState("All");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   useEffect(() => {
     const existingLogs = readAuditLogs();
@@ -95,9 +100,16 @@ export default function AuditHistoryPage() {
       const actionMatches =
         filterAction === "All" || log.actionType === filterAction;
 
-      return moduleMatches && actionMatches;
+      const query = searchQuery.trim().toLowerCase();
+      const searchMatches = !query || [log.module, log.actionType, log.recordRef,
+        log.oldValue, log.newValue, log.role, log.user, log.note]
+        .some((value) => String(value || "").toLowerCase().includes(query));
+      return moduleMatches && actionMatches && searchMatches;
     });
-  }, [logs, filterModule, filterAction]);
+  }, [logs, filterModule, filterAction, searchQuery]);
+
+  useEffect(() => setPage(1), [filterModule, filterAction, searchQuery]);
+  const paginatedLogs = filteredLogs.slice((page - 1) * pageSize, page * pageSize);
 
   function addSampleLogs() {
     const existingLogs = readAuditLogs();
@@ -190,12 +202,15 @@ export default function AuditHistoryPage() {
             </select>
           </label>
         </div>
+        <div style={{ marginTop: 16 }}>
+          <RegisterSearch value={searchQuery} onChange={setSearchQuery} resultCount={filteredLogs.length} placeholder="Search record, module, action, user or note..." />
+        </div>
       </section>
 
       <section style={styles.card}>
         <h2 style={styles.sectionTitle}>Audit Log Records</h2>
 
-        <p style={styles.helper}>
+        <p style={{ ...styles.helper, color: "#334155", fontWeight: 600 }}>
           This page is currently reading from localStorage. In the backend phase,
           these records should be protected from management deletion or silent
           editing.
@@ -224,7 +239,7 @@ export default function AuditHistoryPage() {
               </thead>
 
               <tbody>
-                {filteredLogs.map((log) => (
+                {paginatedLogs.map((log) => (
                   <tr key={log.id}>
                     <td style={styles.td}>{formatDate(log.createdAt)}</td>
                     <td style={styles.tdStrong}>{log.module}</td>
@@ -239,6 +254,7 @@ export default function AuditHistoryPage() {
                 ))}
               </tbody>
             </table>
+            <Pagination page={page} pageSize={pageSize} totalItems={filteredLogs.length} onPageChange={setPage} />
           </div>
         )}
       </section>
@@ -272,12 +288,12 @@ const styles: Record<string, React.CSSProperties> = {
     minHeight: "100vh",
     background: "#080b12",
     color: "#f5f0e6",
-    padding: "48px",
+    padding: "32px clamp(20px, 4vw, 48px)",
     fontFamily: "Manrope, sans-serif",
   },
 
   header: {
-    maxWidth: "1100px",
+    maxWidth: "1500px",
     marginBottom: "32px",
   },
 
@@ -333,7 +349,7 @@ const styles: Record<string, React.CSSProperties> = {
     gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
     gap: "18px",
     marginBottom: "28px",
-    maxWidth: "1200px",
+    maxWidth: "1500px",
   },
 
   metricCard: {
@@ -362,7 +378,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid rgba(214,168,79,0.25)",
     borderRadius: "20px",
     padding: "28px",
-    maxWidth: "1200px",
+    maxWidth: "1500px",
     marginBottom: "28px",
   },
 
@@ -371,16 +387,17 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid rgba(214,168,79,0.35)",
     borderRadius: "20px",
     padding: "28px",
-    maxWidth: "1200px",
+    maxWidth: "1500px",
   },
 
   sectionTitle: {
     margin: "0 0 10px",
     fontSize: "22px",
+    color: "#ffffff",
   },
 
   helper: {
-    color: "#b7bdc8",
+    color: "#e2e8f0",
     lineHeight: 1.6,
   },
 
@@ -416,17 +433,22 @@ const styles: Record<string, React.CSSProperties> = {
   tableWrap: {
     overflowX: "auto",
     marginTop: "18px",
+    background: "#ffffff",
+    borderRadius: "12px",
+    border: "1px solid #cbd5e1",
   },
 
   table: {
     width: "100%",
+    minWidth: "1450px",
     borderCollapse: "collapse",
   },
 
   th: {
     textAlign: "left",
     padding: "14px",
-    color: "#d6a84f",
+    color: "#ffffff",
+    background: "#12304d",
     borderBottom: "1px solid #273244",
     fontSize: "13px",
     textTransform: "uppercase",
@@ -435,17 +457,17 @@ const styles: Record<string, React.CSSProperties> = {
   },
 
   td: {
-    padding: "14px",
+    padding: "12px 14px",
     borderBottom: "1px solid #1d2635",
-    color: "#d7dce5",
+    color: "#26364a",
     verticalAlign: "top",
     fontSize: "14px",
   },
 
   tdStrong: {
-    padding: "14px",
+    padding: "12px 14px",
     borderBottom: "1px solid #1d2635",
-    color: "#fff",
+    color: "#17263a",
     fontWeight: 800,
     verticalAlign: "top",
     fontSize: "14px",

@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import Pagination from "../components/Pagination";
+import RegisterSearch from "../components/RegisterSearch";
 
 type RiskStatus = "Green" | "Amber" | "Red" | "NPL";
 type ActionStatus =
@@ -261,7 +263,10 @@ export default function ActionTrackerPage() {
   const [activeFilter, setActiveFilter] =
     useState<(typeof filters)[number]>("All Actions");
   const [officerFilter, setOfficerFilter] = useState("All Officers");
+  const [searchQuery, setSearchQuery] = useState("");
   const [message, setMessage] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   useEffect(() => {
     let cancelled = false;
@@ -350,6 +355,12 @@ export default function ActionTrackerPage() {
           action.assigned_to === officerFilter ||
           (officerFilter === "Unassigned" && !action.assigned_to);
         if (!matchesOfficer) return false;
+        const query = searchQuery.trim().toLowerCase();
+        const matchesSearch = !query || [action.action_id, action.member_name, action.loan_account,
+          action.risk_source, action.risk_status, action.action_required, action.assigned_to,
+          action.status, action.escalation_level, action.notes]
+          .some((value) => String(value || "").toLowerCase().includes(query));
+        if (!matchesSearch) return false;
         if (activeFilter === "All Actions") return true;
         if (activeFilter === "Open") return action.status !== "Closed";
         if (activeFilter === "Overdue") return isOverdue(action);
@@ -367,8 +378,10 @@ export default function ActionTrackerPage() {
           return record?.restructured?.toLowerCase() === "yes";
         return (record?.risk_flags || []).includes("High Exposure");
       }),
-    [actions, activeFilter, officerFilter, recordMap]
+    [actions, activeFilter, officerFilter, recordMap, searchQuery]
   );
+  useEffect(() => setPage(1), [activeFilter, officerFilter, searchQuery]);
+  const paginatedActions = visibleActions.slice((page - 1) * pageSize, page * pageSize);
 
   function updateAction(
     actionId: string,
@@ -422,7 +435,7 @@ export default function ActionTrackerPage() {
               assigned management actions, follow-up responsibilities, due
               dates, escalation status, and Board-visible accountability.
             </p>
-            <p className="mt-2 text-sm font-semibold text-slate-500">
+            <p className="mt-2 text-sm font-semibold text-slate-800">
               Insight → Action → Accountability → Board Oversight
             </p>
           </div>
@@ -455,7 +468,7 @@ export default function ActionTrackerPage() {
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
               {cards.map(([label, value, colour]) => (
                 <div key={label} className="rounded-2xl bg-white p-5 shadow-sm">
-                  <p className="text-sm text-slate-500">{label}</p>
+                  <p className="text-sm font-semibold text-slate-800">{label}</p>
                   <h2 className={`mt-2 text-2xl font-bold ${colour}`}>{value}</h2>
                 </div>
               ))}
@@ -497,6 +510,9 @@ export default function ActionTrackerPage() {
                   ))}
                 </select>
               </div>
+              <div className="mt-4">
+                <RegisterSearch value={searchQuery} onChange={setSearchQuery} resultCount={visibleActions.length} placeholder="Search borrower, loan account, action, officer, status or escalation..." />
+              </div>
             </section>
 
             <section className="mt-8 rounded-2xl bg-white p-6 shadow-sm">
@@ -505,7 +521,7 @@ export default function ActionTrackerPage() {
                   <h2 className="text-xl font-bold text-slate-950">
                     Execution Register
                   </h2>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-sm font-medium text-slate-800">
                     {visibleActions.length} action
                     {visibleActions.length === 1 ? "" : "s"} shown. Every action
                     remains traceable to its originating risk signal.
@@ -519,7 +535,7 @@ export default function ActionTrackerPage() {
                 </Link>
               </div>
 
-              <p className="mt-5 text-xs font-semibold text-slate-500">
+              <p className="mt-5 text-sm font-semibold text-slate-800">
                 Scroll sideways inside the register to view all 13 columns →
               </p>
               <div className="mt-2 overflow-x-scroll rounded-xl border border-slate-300 pb-4 [scrollbar-gutter:stable]">
@@ -548,7 +564,7 @@ export default function ActionTrackerPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleActions.map((action) => {
+                    {paginatedActions.map((action) => {
                       const overdue = isOverdue(action);
                       const boardVisible = isBoardVisible(
                         action,
@@ -711,6 +727,7 @@ export default function ActionTrackerPage() {
                   </tbody>
                 </table>
               </div>
+              <Pagination page={page} pageSize={pageSize} totalItems={visibleActions.length} onPageChange={setPage} />
             </section>
 
             <div className="mt-8 grid gap-6 lg:grid-cols-2">
