@@ -19,11 +19,11 @@ export default function Pagination({ page, pageSize, totalItems, onPageChange }:
       <p className="text-sm font-semibold text-slate-700">
         Showing {start}–{end} of {totalItems}
       </p>
-      <div className="flex items-center gap-2">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:flex">
         <button type="button" disabled={page === 1} onClick={() => onPageChange(page - 1)} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-40">
           Previous
         </button>
-        <span className="min-w-24 text-center text-sm font-bold text-slate-800">Page {page} of {totalPages}</span>
+        <span className="min-w-20 text-center text-xs font-bold text-slate-800 sm:min-w-24 sm:text-sm">Page {page} of {totalPages}</span>
         <button type="button" disabled={page === totalPages} onClick={() => onPageChange(page + 1)} className="rounded-full bg-slate-950 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">
           Next page
         </button>

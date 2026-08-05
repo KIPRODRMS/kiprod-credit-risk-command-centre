@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import * as XLSX from "xlsx";
 
 type RiskStatus = "Green" | "Amber" | "Red" | "NPL";
 
@@ -20,6 +21,23 @@ type LoanRecord = {
   responsible_officer: string;
   restructured: string;
   risk_status: RiskStatus;
+  risk_flags?: string[];
+};
+
+type ActionItem = {
+  action_id: string;
+  loan_account: string;
+  member_name: string;
+  risk_status: RiskStatus;
+  risk_source: string;
+  action_required: string;
+  assigned_to: string;
+  due_date: string;
+  status: "New" | "Assigned";
+  escalation_level: string;
+  board_visible: boolean;
+  notes: string;
+  last_updated: string;
 };
 
 type AuditLog = {
@@ -74,25 +92,26 @@ function getRiskStatus(days: number): RiskStatus {
 }
 
 function parseCsvRows(csvText: string) {
-  const lines = csvText.trim().split(/\r?\n/);
+  const workbook = XLSX.read(csvText, { type: "string", raw: false });
+  const firstSheetName = workbook.SheetNames[0];
 
-  if (lines.length < 2) {
-    return {
-      headers: [],
-      rows: [],
-    };
-  }
+  if (!firstSheetName) return { headers: [], rows: [] };
 
-  const headers = lines[0].split(",").map((header) => header.trim());
+  const worksheet = workbook.Sheets[firstSheetName];
+  const matrix = XLSX.utils.sheet_to_json<(string | number | boolean)[]>(worksheet, {
+    header: 1,
+    defval: "",
+    raw: false,
+  });
 
-  const rows = lines.slice(1).map((line) => {
-    const values = line.split(",").map((value) => value.trim());
+  if (matrix.length < 2) return { headers: [], rows: [] };
+
+  const headers = matrix[0].map((header) => String(header).trim());
+  const rows = matrix.slice(1).map((values) => {
     const row: Record<string, string> = {};
-
     headers.forEach((header, index) => {
-      row[header] = values[index] || "";
+      row[header] = String(values[index] ?? "").trim();
     });
-
     return row;
   });
 
@@ -160,7 +179,7 @@ function validateRows(headers: string[], rows: Record<string, string>[]) {
 }
 
 function buildLoanRecords(rows: Record<string, string>[]): LoanRecord[] {
-  return rows.map((row) => {
+  const records = rows.map((row) => {
     const daysInArrears = Number(row.days_in_arrears || 0);
 
     return {
@@ -179,8 +198,66 @@ function buildLoanRecords(rows: Record<string, string>[]): LoanRecord[] {
       responsible_officer: row.responsible_officer || "",
       restructured: row.restructured || "No",
       risk_status: getRiskStatus(daysInArrears),
+      risk_flags: row.restructured?.toLowerCase() === "yes" ? ["Restructured Risk"] : [],
     };
   });
+
+  // MVP material-exposure rule: flag the ten largest live balances.
+  const highExposureAccounts = new Set(
+    [...records]
+      .filter((record) => record.risk_status !== "Green")
+      .sort((a, b) => b.outstanding_balance - a.outstanding_balance)
+      .slice(0, Math.min(10, records.length))
+      .map((record) => record.loan_account)
+  );
+
+  return records.map((record) => ({
+    ...record,
+    risk_flags: highExposureAccounts.has(record.loan_account)
+      ? [...(record.risk_flags || []), "High Exposure"]
+      : record.risk_flags,
+  }));
+}
+
+function addDays(date: Date, days: number) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result.toISOString().slice(0, 10);
+}
+
+function buildInitialActions(records: LoanRecord[]): ActionItem[] {
+  const today = new Date();
+  return records
+    .filter((record) => record.risk_status !== "Green" || record.risk_flags?.includes("High Exposure"))
+    .map((record, index) => {
+      const isNpl = record.risk_status === "NPL";
+      const isRed = record.risk_status === "Red";
+      const isHighExposure = record.risk_flags?.includes("High Exposure") ?? false;
+      const dueInDays = isNpl ? 0 : isRed || isHighExposure ? 3 : 7;
+      return {
+        action_id: `ACT-${String(index + 1).padStart(4, "0")}`,
+        loan_account: record.loan_account,
+        member_name: record.member_name,
+        risk_status: record.risk_status,
+        risk_source: isHighExposure ? "High Exposure" : isNpl ? "NPL" : "Early Warning",
+        action_required: isNpl
+          ? "Move to recovery attention and prepare an account recovery strategy."
+          : isRed || isHighExposure
+            ? "Escalate for manager review and agree a structured intervention plan."
+            : "Contact borrower, confirm the cause of arrears and agree a repayment correction.",
+        assigned_to: record.responsible_officer || "",
+        due_date: addDays(today, dueInDays),
+        status: record.responsible_officer ? "Assigned" : "New",
+        escalation_level: isNpl || isHighExposure
+          ? "Level 3: Senior Management Escalation"
+          : isRed
+            ? "Level 2: Credit Manager Review"
+            : "Level 1: Officer Follow-up",
+        board_visible: isNpl || isHighExposure,
+        notes: "Automatically created from the latest portfolio upload.",
+        last_updated: new Date().toISOString(),
+      };
+    });
 }
 
 function writePortfolioUploadAudit(
@@ -240,6 +317,7 @@ export default function PortfolioUploadPage() {
   const [sourceName, setSourceName] = useState("Pasted portfolio data");
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessages, setErrorMessages] = useState<string[]>([]);
+  const [isReadingFile, setIsReadingFile] = useState(false);
 
   function handleSaveData() {
     setSuccessMessage("");
@@ -257,9 +335,16 @@ export default function PortfolioUploadPage() {
     }
 
     const records = buildLoanRecords(rows);
+    const actions = buildInitialActions(records);
+    const uploadedAt = new Date().toISOString();
 
     localStorage.setItem("kiprod_loan_records", JSON.stringify(records));
-    localStorage.removeItem("kiprod_action_items");
+    localStorage.setItem("kiprod_action_items", JSON.stringify(actions));
+    localStorage.setItem("kiprod_portfolio_source", JSON.stringify({
+      sourceName,
+      uploadedAt,
+      recordCount: records.length,
+    }));
 
     const amberCount = records.filter(
       (record) => record.risk_status === "Amber"
@@ -287,29 +372,45 @@ export default function PortfolioUploadPage() {
     });
 
     setSuccessMessage(
-      `Portfolio saved successfully. ${records.length} loan accounts processed. Risk classification completed. Amber: ${amberCount}, Red: ${redCount}, NPL: ${nplCount}, Watchlist: ${watchlistCount}. Executive Cockpit, Early Warning Register, Watchlist, Board Report, and Execution Tracker have been updated.`
+      `Portfolio saved successfully. ${records.length} loan accounts processed and ${actions.length} management actions created. Risk classification completed. Amber: ${amberCount}, Red: ${redCount}, NPL: ${nplCount}, Watchlist: ${watchlistCount}. Executive Cockpit, Early Warning Register, Watchlist, Board Report, and Execution Tracker have been updated.`
     );
   }
 
-  function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
 
     if (!file) return;
 
-    const reader = new FileReader();
+    setIsReadingFile(true);
+    setSuccessMessage("");
+    setErrorMessages([]);
 
-    reader.onload = (e) => {
-      const text = e.target?.result;
-
-      if (typeof text === "string") {
-        setCsvText(text);
-        setSourceName(file.name);
-        setSuccessMessage("");
-        setErrorMessages([]);
+    try {
+      const extension = file.name.split(".").pop()?.toLowerCase();
+      if (!extension || !["csv", "xlsx", "xls"].includes(extension)) {
+        throw new Error("Please select a CSV or Excel file (.csv, .xlsx or .xls). ");
       }
-    };
 
-    reader.readAsText(file);
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", raw: false });
+      const firstSheetName = workbook.SheetNames[0];
+      if (!firstSheetName) throw new Error("The selected file does not contain a worksheet.");
+
+      const worksheet = workbook.Sheets[firstSheetName];
+      const normalizedCsv = XLSX.utils.sheet_to_csv(worksheet, { blankrows: false });
+      if (!normalizedCsv.trim()) throw new Error("The selected worksheet is empty.");
+
+      setCsvText(normalizedCsv);
+      setSourceName(file.name);
+    } catch (error) {
+      setErrorMessages([
+        error instanceof Error
+          ? error.message
+          : "The selected file could not be read. Please use the official KIPROD template.",
+      ]);
+      event.target.value = "";
+    } finally {
+      setIsReadingFile(false);
+    }
   }
 
   return (
@@ -325,7 +426,8 @@ export default function PortfolioUploadPage() {
           </h1>
 
           <p className="mt-2 max-w-3xl text-slate-600">
-            Upload or paste the official KIPROD portfolio CSV template. The
+            Upload or paste the official KIPROD portfolio template in CSV or
+            Excel format. The
             system validates the file, classifies accounts by days in arrears,
             and updates the Executive Cockpit, Early Warning Register,
             Watchlist, Board Report, and Execution Tracker.
@@ -346,19 +448,32 @@ export default function PortfolioUploadPage() {
         </div>
 
         <div className="rounded-2xl bg-white p-6 shadow-sm">
-          <label className="block text-sm font-semibold text-slate-700">
-            Upload CSV file
-          </label>
+          <div className="rounded-2xl border-2 border-dashed border-amber-400 bg-slate-950 p-6 text-center shadow-md">
+            <p className="text-lg font-bold text-white">Upload portfolio file</p>
+            <p className="mt-1 text-sm font-medium text-slate-200">
+              Accepted formats: CSV, Excel XLSX and Excel XLS
+            </p>
 
-          <input
-            type="file"
-            accept=".csv"
-            onChange={handleFileUpload}
-            className="mt-3 block w-full rounded-xl border border-slate-300 bg-white p-3 text-sm"
-          />
+            <label className="mt-5 inline-flex cursor-pointer items-center justify-center rounded-full bg-amber-400 px-8 py-3.5 text-base font-bold text-slate-950 shadow-lg transition hover:bg-amber-300 focus-within:ring-4 focus-within:ring-amber-200">
+              {isReadingFile ? "Reading file…" : "Choose CSV or Excel File"}
+              <input
+                type="file"
+                accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                onChange={handleFileUpload}
+                disabled={isReadingFile}
+                className="sr-only"
+              />
+            </label>
+
+            <p className="mt-4 text-sm text-slate-300">
+              {sourceName === "Pasted portfolio data"
+                ? "No file selected yet"
+                : `Selected: ${sourceName}`}
+            </p>
+          </div>
 
           <label className="mt-6 block text-sm font-semibold text-slate-700">
-            CSV data
+            Portfolio data preview
           </label>
 
           <textarea

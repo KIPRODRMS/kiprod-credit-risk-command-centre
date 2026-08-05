@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Pagination from "../components/Pagination";
 
 type LoanRecord = {
   member_name: string;
@@ -37,6 +38,8 @@ function countBy(records: LoanRecord[], key: keyof LoanRecord) {
 
 export default function DashboardPage() {
   const [records, setRecords] = useState<LoanRecord[]>([]);
+  const [registerPage, setRegisterPage] = useState(1);
+  const registerPageSize = 25;
 
   useEffect(() => {
     const saved = localStorage.getItem("kiprod_loan_records");
@@ -99,27 +102,39 @@ export default function DashboardPage() {
     "branch"
   ).slice(0, 5);
 
+  const riskRecords = useMemo(
+    () => records.filter((record) => record.risk_status !== "Green"),
+    [records]
+  );
+  const paginatedRiskRecords = riskRecords.slice(
+    (registerPage - 1) * registerPageSize,
+    registerPage * registerPageSize
+  );
+  const arrearsRate = metrics.outstandingBalance
+    ? (metrics.totalArrears / metrics.outstandingBalance) * 100
+    : 0;
+
   return (
-    <main className="min-h-screen bg-slate-100 p-6">
+    <main className="min-h-screen bg-slate-100 px-3 py-4 sm:p-6">
       <section className="mx-auto max-w-7xl">
-        <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
+        <div className="mb-6 overflow-hidden rounded-3xl border border-amber-400/25 bg-slate-950 p-5 shadow-xl sm:p-8">
+          <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-wide text-amber-600">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-400">
               KIPROD Command Centre
             </p>
-            <h1 className="text-3xl font-bold text-slate-950">
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-white sm:text-4xl">
               Credit Risk Dashboard
             </h1>
-            <p className="mt-2 text-slate-600">
-              Portfolio visibility, early warning indicators, and board-ready
-              risk summaries.
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
+              Executive portfolio intelligence, early-warning visibility and board-ready action.
             </p>
           </div>
 
          <div className="flex flex-col gap-3 sm:flex-row">
   <a
     href="/portfolio-upload"
-    className="rounded-full bg-slate-950 px-5 py-3 text-center text-sm font-semibold text-white"
+    className="rounded-full border border-slate-600 bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white transition hover:border-amber-400"
   >
     Upload New Data
   </a>
@@ -133,11 +148,12 @@ export default function DashboardPage() {
 
   <a
     href="/action-tracker"
-    className="rounded-full border border-slate-300 bg-white px-5 py-3 text-center text-sm font-semibold text-slate-800"
+    className="dashboard-action-button rounded-full border border-white/30 bg-slate-700 px-5 py-3 text-center text-sm font-semibold transition hover:bg-slate-600"
   >
     Open Action Tracker
   </a>
 </div>
+          </div>
         </div>
 
         {records.length === 0 ? (
@@ -157,36 +173,42 @@ export default function DashboardPage() {
           </div>
         ) : (
           <>
-            <div className="grid gap-4 md:grid-cols-4">
-              <div className="rounded-2xl bg-white p-5 shadow-sm">
-                <p className="text-sm text-slate-500">Total Portfolio</p>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                <p className="dashboard-kpi-title text-sm font-extrabold uppercase tracking-wide">Total Portfolio</p>
                 <h2 className="mt-2 text-2xl font-bold text-slate-950">
                   {formatKes(metrics.totalPortfolio)}
                 </h2>
               </div>
 
-              <div className="rounded-2xl bg-white p-5 shadow-sm">
-                <p className="text-sm text-slate-500">Outstanding Balance</p>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                <p className="dashboard-kpi-title text-sm font-extrabold uppercase tracking-wide">Outstanding Balance</p>
                 <h2 className="mt-2 text-2xl font-bold text-slate-950">
                   {formatKes(metrics.outstandingBalance)}
                 </h2>
               </div>
 
-              <div className="rounded-2xl bg-white p-5 shadow-sm">
-                <p className="text-sm text-slate-500">Total Arrears</p>
+              <div className="rounded-2xl border border-red-200 bg-red-50 p-4 shadow-sm sm:p-5">
+                <p
+                  className="dashboard-arrears-title text-sm font-extrabold uppercase tracking-wide"
+                  style={{ color: "#000000", WebkitTextFillColor: "#000000" }}
+                >
+                  Total Arrears
+                </p>
                 <h2 className="mt-2 text-2xl font-bold text-red-600">
                   {formatKes(metrics.totalArrears)}
                 </h2>
               </div>
 
-              <div className="rounded-2xl bg-white p-5 shadow-sm">
-                <p className="text-sm text-slate-500">Accounts Uploaded</p>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                <p className="dashboard-kpi-title text-sm font-extrabold uppercase tracking-wide">Accounts Uploaded</p>
                 <h2 className="mt-2 text-2xl font-bold text-slate-950">
                   {records.length}
                 </h2>
               </div>
             </div>
-<div className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
+<div className="my-5 grid gap-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:grid-cols-[1fr_280px] lg:p-6">
+  <div>
   <p className="text-sm font-semibold uppercase tracking-wide text-amber-600">
     Management Interpretation
   </p>
@@ -231,7 +253,17 @@ export default function DashboardPage() {
     </a>
   </div>
 </div>
-            <div className="mt-4 grid gap-4 md:grid-cols-4">
+  <aside className="rounded-2xl bg-slate-950 p-5 text-white">
+    <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-400">Executive Signal</p>
+    <p className="mt-3 text-3xl font-bold">{arrearsRate.toFixed(1)}%</p>
+    <p className="mt-1 text-sm font-semibold text-slate-200">Arrears to outstanding balance</p>
+    <div className="mt-5 border-t border-white/15 pt-4">
+      <p className="text-2xl font-bold text-amber-400">{riskRecords.length}</p>
+      <p className="text-sm text-slate-300">Accounts requiring attention</p>
+    </div>
+  </aside>
+</div>
+            <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
               <div className="rounded-2xl bg-white p-5 shadow-sm">
                 <p className="text-sm text-slate-500">Watchlist Accounts</p>
                 <h2 className="mt-2 text-2xl font-bold text-amber-600">
@@ -313,16 +345,17 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="mt-8 rounded-2xl bg-white p-6 shadow-sm">
-              <h2 className="text-xl font-bold text-slate-950">
-                Early Warning Register
-              </h2>
+            <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div><p className="text-xs font-bold uppercase tracking-wide text-amber-700">Management attention</p><h2 className="mt-1 text-xl font-bold text-slate-950">Early Warning Register</h2></div>
+                <a href="/early-warning" className="text-sm font-bold text-slate-800 underline decoration-amber-400 decoration-2 underline-offset-4">Open full register</a>
+              </div>
 
-              <div className="mt-5 overflow-x-auto">
+              <div className="mt-5 hidden overflow-x-auto md:block">
                 <table className="w-full min-w-[900px] text-left text-sm">
                   <thead>
                     <tr className="border-b text-slate-500">
-                      <th className="py-3">Member</th>
+                      <th className="py-3 pl-5 pr-4">Member</th>
                       <th className="py-3">Product</th>
                       <th className="py-3">Branch</th>
                       <th className="py-3">Employer</th>
@@ -333,9 +366,9 @@ export default function DashboardPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {records.map((record) => (
+                    {paginatedRiskRecords.map((record) => (
                       <tr key={record.loan_account} className="border-b">
-                        <td className="py-3 font-medium text-slate-900">
+                        <td className="py-3 pl-5 pr-4 font-medium text-slate-900">
                           {record.member_name}
                         </td>
                         <td className="py-3 text-slate-700">
@@ -376,6 +409,23 @@ export default function DashboardPage() {
                   </tbody>
                 </table>
               </div>
+              <div className="mt-4 space-y-3 md:hidden">
+                {paginatedRiskRecords.map((record) => (
+                  <article key={record.loan_account} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div><h3 className="font-bold text-slate-950">{record.member_name}</h3><p className="mt-1 text-xs font-semibold text-slate-600">{record.loan_product} · {record.branch}</p></div>
+                      <span className={`rounded-full px-3 py-1 text-xs font-bold ${record.risk_status === "Amber" ? "bg-amber-200 text-amber-900" : record.risk_status === "Red" ? "bg-red-200 text-red-900" : "bg-red-700 text-white"}`}>{record.risk_status}</span>
+                    </div>
+                    <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                      <div><dt className="font-semibold text-slate-600">Outstanding</dt><dd className="mt-1 font-bold text-slate-950">{formatKes(record.outstanding_balance)}</dd></div>
+                      <div><dt className="font-semibold text-slate-600">Arrears</dt><dd className="mt-1 font-bold text-red-700">{formatKes(record.arrears_amount)}</dd></div>
+                      <div><dt className="font-semibold text-slate-600">Employer</dt><dd className="mt-1 text-slate-900">{record.employer}</dd></div>
+                      <div><dt className="font-semibold text-slate-600">Days</dt><dd className="mt-1 font-bold text-slate-950">{record.days_in_arrears}</dd></div>
+                    </dl>
+                  </article>
+                ))}
+              </div>
+              <Pagination page={registerPage} pageSize={registerPageSize} totalItems={riskRecords.length} onPageChange={setRegisterPage} />
             </div>
           </>
         )}

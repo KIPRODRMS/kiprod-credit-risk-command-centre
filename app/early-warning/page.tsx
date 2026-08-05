@@ -116,7 +116,7 @@ export default function EarlyWarningPage() {
   const [activeFilter, setActiveFilter] = useState<RiskFilter>("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
-  const pageSize = 10;
+  const pageSize = 25;
 
   useEffect(() => {
     const loadRecords = window.setTimeout(() => {
@@ -137,7 +137,10 @@ export default function EarlyWarningPage() {
 
   const riskyRecords = useMemo(() => {
     return records
-      .filter((record) => record.risk_status !== "Green")
+      .filter(
+        (record) =>
+          record.risk_status !== "Green" || hasFlag(record, "High Exposure")
+      )
       .sort((a, b) => b.days_in_arrears - a.days_in_arrears);
   }, [records]);
 
@@ -362,7 +365,7 @@ export default function EarlyWarningPage() {
                   <table className="w-full min-w-[1900px] text-left text-sm">
                     <thead>
                       <tr className="border-b border-slate-300 bg-slate-950 text-white">
-                        <th className="py-3 pl-3 pr-4 text-white">Member Name</th>
+                        <th className="py-3 pl-5 pr-4 text-white">Member Name</th>
                         <th className="py-3 pr-4">Member Number</th>
                         <th className="py-3 pr-4">Loan Account</th>
                         <th className="py-3 pr-4">Branch</th>
@@ -384,7 +387,7 @@ export default function EarlyWarningPage() {
                           key={record.loan_account}
                           className="border-b align-top"
                         >
-                          <td className="py-3 pr-4 font-medium text-slate-900">
+                          <td className="py-3 pl-5 pr-4 font-medium text-slate-900">
                             {record.member_name}
                           </td>
                           <td className="py-3 pr-4 text-slate-700">

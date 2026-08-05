@@ -1657,3 +1657,24 @@ main .grid > [class~="bg-white"] > .text-red-800 {
   color: #ffffff !important;
   -webkit-text-fill-color: #ffffff !important;
 }
+.dashboard-kpi-title {
+  color: #0b2a55 !important;
+  -webkit-text-fill-color: #0b2a55 !important;
+  opacity: 1 !important;
+}
+
+.dashboard-action-button,
+.dashboard-action-button:link,
+.dashboard-action-button:visited,
+.dashboard-action-button:hover,
+.dashboard-action-button:active {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+.route-dashboard .dashboard-arrears-title {
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+  opacity: 1 !important;
+}

@@ -14,7 +14,13 @@ type LoanRecord = {
 
 type ActionItem = {
   due_date: string;
-  status: "Open" | "In Progress" | "Completed" | "Escalated";
+  status: string;
+};
+
+type PortfolioSource = {
+  sourceName: string;
+  uploadedAt: string;
+  recordCount: number;
 };
 
 const activeModules = [
@@ -39,10 +45,12 @@ export default function ExecutiveDashboardPage() {
   const [records, setRecords] = useState<LoanRecord[]>([]);
   const [actions, setActions] = useState<ActionItem[]>([]);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [portfolioSource, setPortfolioSource] = useState<PortfolioSource | null>(null);
 
   useEffect(() => {
     const savedRecords = localStorage.getItem("kiprod_loan_records");
     const savedActions = localStorage.getItem("kiprod_action_items");
+    const savedSource = localStorage.getItem("kiprod_portfolio_source");
 
     if (savedRecords) {
       try {
@@ -61,6 +69,10 @@ export default function ExecutiveDashboardPage() {
         if (Array.isArray(parsedActions)) setActions(parsedActions);
       } catch { setActions([]); }
     }
+
+    if (savedSource) {
+      try { setPortfolioSource(JSON.parse(savedSource)); } catch { setPortfolioSource(null); }
+    }
   }, []);
 
   const metrics = useMemo(() => {
@@ -73,7 +85,9 @@ export default function ExecutiveDashboardPage() {
       .reduce((sum, r) => sum + Number(r.outstanding_balance || 0), 0);
     const parAccounts = (days: number) => records.filter((r) => Number(r.days_in_arrears) > days).length;
     const today = new Date().toISOString().slice(0, 10);
-    const actionsDue = actions.filter((a) => a.status !== "Completed" && a.due_date && a.due_date <= today).length;
+    const actionsDue = actions.filter(
+      (a) => !["Completed", "Closed"].includes(a.status) && a.due_date && a.due_date <= today
+    ).length;
     const risk = { Green: count("Green"), Amber: count("Amber"), Red: count("Red"), NPL: count("NPL") };
     const performingRate = records.length ? (risk.Green / records.length) * 100 : 0;
     const arrearsRate = outstandingBalance ? (totalArrears / outstandingBalance) * 100 : 0;
@@ -117,6 +131,11 @@ export default function ExecutiveDashboardPage() {
             <span><i className={dataLoaded ? "is-live" : ""} /> Intelligence status</span>
             <strong>{dataLoaded ? "Portfolio live" : "Awaiting portfolio"}</strong>
             <small>{records.length} accounts under monitoring</small>
+            {portfolioSource ? (
+              <small title={portfolioSource.sourceName}>
+                Source: {portfolioSource.sourceName} · uploaded {new Date(portfolioSource.uploadedAt).toLocaleString("en-KE")}
+              </small>
+            ) : null}
           </div>
         </header>
 
