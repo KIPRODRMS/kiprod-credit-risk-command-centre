@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 
 const navItems = [
   { label: "Home", href: "/" },
+  { label: "Credit Risk Dashboard", href: "/dashboard" },
   { label: "Institution Profile", href: "/institution-profile" },
   { label: "Executive Cockpit", href: "/executive-dashboard" },
   { label: "Portfolio Upload", href: "/portfolio-upload" },
