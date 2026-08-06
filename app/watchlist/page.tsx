@@ -37,7 +37,7 @@ type ActionItem = {
   loan_account: string;
   assigned_to?: string;
   due_date?: string;
-  status?: "Open" | "In Progress" | "Completed" | "Escalated";
+  status?: string;
   notes?: string;
 };
 
@@ -75,6 +75,23 @@ function isHighExposure(record: LoanRecord) {
   return hasFlag(record, "High Exposure");
 }
 
+function applyHighExposureRule(records: LoanRecord[]) {
+  const topAccounts = new Set(
+    records
+      .filter((record) => record.risk_status !== "Green")
+      .sort((a, b) => b.outstanding_balance - a.outstanding_balance)
+      .slice(0, 10)
+      .map((record) => record.loan_account)
+  );
+
+  return records.map((record) => ({
+    ...record,
+    risk_flags: topAccounts.has(record.loan_account)
+      ? Array.from(new Set([...(record.risk_flags || []), "High Exposure"]))
+      : (record.risk_flags || []).filter((flag) => flag !== "High Exposure"),
+  }));
+}
+
 function riskBadgeClass(status: RiskStatus) {
   if (status === "Amber") return "bg-amber-200 text-amber-900";
   if (status === "Red") return "bg-red-200 text-red-900";
@@ -108,14 +125,14 @@ function escalationLevel(record: LoanRecord) {
 }
 
 function operationalStatus(action?: ActionItem) {
-  if (action?.status === "Completed") return "Closed";
+  if (action?.status === "Completed" || action?.status === "Closed") return "Closed";
   if (action?.status === "Escalated") return "Escalated";
   if (action?.status === "In Progress") return "Under Review";
   return "New";
 }
 
 function isOverdue(action?: ActionItem) {
-  if (!action?.due_date || action.status === "Completed") return false;
+  if (!action?.due_date || ["Completed", "Closed"].includes(action.status || "")) return false;
 
   const dueDate = new Date(`${action.due_date}T23:59:59`);
   return !Number.isNaN(dueDate.getTime()) && dueDate.getTime() < Date.now();
@@ -137,7 +154,7 @@ export default function WatchlistPage() {
 
         if (savedRecords) {
           const parsedRecords = JSON.parse(savedRecords);
-          setRecords(Array.isArray(parsedRecords) ? parsedRecords : []);
+          setRecords(Array.isArray(parsedRecords) ? applyHighExposureRule(parsedRecords) : []);
         }
 
         if (savedActions) {
@@ -377,14 +394,14 @@ export default function WatchlistPage() {
                 </p>
               </div>
 
-              <p className="mt-5 text-sm font-semibold text-slate-800">
+              <p className="mt-5 hidden text-sm font-semibold text-slate-800 md:block">
                 Scroll sideways inside the register to view all 15 columns →
               </p>
-              <div className="mt-2 overflow-x-scroll pb-4 [scrollbar-gutter:stable]">
+              <div className="mt-2 hidden overflow-x-auto rounded-xl border border-slate-200 pb-4 [scrollbar-gutter:stable] md:block">
                 <table className="w-full min-w-[2100px] text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-300 bg-slate-950 text-white">
-                      <th className="py-3 pr-5">Member Name</th>
+                      <th className="min-w-[150px] py-3 pl-8 pr-5">Member Name</th>
                       <th className="py-3 pr-5">Loan Account</th>
                       <th className="py-3 pr-5">Branch</th>
                       <th className="py-3 pr-5">Employer</th>
@@ -410,7 +427,7 @@ export default function WatchlistPage() {
                           record.overdue ? "bg-red-50" : ""
                         }`}
                       >
-                        <td className="py-4 pr-5 font-medium text-slate-900">
+                        <td className="min-w-[150px] py-4 pl-8 pr-5 font-medium text-slate-900">
                           {record.member_name}
                         </td>
                         <td className="py-4 pr-5 text-slate-700">
@@ -479,6 +496,86 @@ export default function WatchlistPage() {
 
                 {filteredRecords.length === 0 && (
                   <div className="rounded-xl bg-slate-100 p-6 text-center text-slate-600">
+                    No accounts match the selected Watchlist filter.
+                  </div>
+                )}
+              </div>
+              <div className="mt-4 grid gap-3 md:hidden">
+                {paginatedRecords.map((record) => (
+                  <article
+                    key={record.loan_account}
+                    className={`rounded-xl border p-4 shadow-sm ${
+                      record.overdue
+                        ? "border-red-200 bg-red-50"
+                        : "border-slate-200 bg-white"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="break-words text-base font-bold text-slate-950">
+                          {record.member_name}
+                        </h3>
+                        <p className="mt-1 text-sm font-semibold text-slate-600">
+                          {record.loan_account}
+                        </p>
+                      </div>
+                      <span
+                        className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${riskBadgeClass(
+                          record.risk_status
+                        )}`}
+                      >
+                        {record.risk_status}
+                      </span>
+                    </div>
+
+                    <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                      <div>
+                        <dt className="font-bold text-slate-950">Branch</dt>
+                        <dd className="mt-1 break-words text-slate-700">{record.branch}</dd>
+                      </div>
+                      <div>
+                        <dt className="font-bold text-slate-950">Outstanding</dt>
+                        <dd className="mt-1 text-slate-700">
+                          {formatKes(record.outstanding_balance)}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="font-bold text-slate-950">Arrears</dt>
+                        <dd className="mt-1 text-slate-700">
+                          {formatKes(record.arrears_amount)} · {record.days_in_arrears} days
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="font-bold text-slate-950">Officer</dt>
+                        <dd className="mt-1 break-words text-slate-700">
+                          {record.action?.assigned_to ||
+                            record.responsible_officer ||
+                            "Unassigned"}
+                        </dd>
+                      </div>
+                      <div className="col-span-2">
+                        <dt className="font-bold text-slate-950">Watchlist reason</dt>
+                        <dd className="mt-1 break-words leading-5 text-slate-700">
+                          {record.reason}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="font-bold text-slate-950">Follow-up</dt>
+                        <dd className={`mt-1 ${record.overdue ? "font-bold text-red-700" : "text-slate-700"}`}>
+                          {record.action?.due_date || "Not scheduled"}
+                          {record.overdue ? " · Overdue" : ""}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="font-bold text-slate-950">Status</dt>
+                        <dd className="mt-1 text-slate-700">{record.operationalStatus}</dd>
+                      </div>
+                    </dl>
+                  </article>
+                ))}
+
+                {filteredRecords.length === 0 && (
+                  <div className="rounded-xl bg-slate-100 p-6 text-center font-medium text-slate-700">
                     No accounts match the selected Watchlist filter.
                   </div>
                 )}
