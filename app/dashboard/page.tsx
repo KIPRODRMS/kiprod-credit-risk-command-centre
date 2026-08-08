@@ -65,7 +65,7 @@ export default function DashboardPage() {
       0
     );
 
-    const watchlistAccounts = records.filter(
+    const earlyWarningAccounts = records.filter(
       (record) => record.risk_status === "Amber" || record.risk_status === "Red"
     ).length;
 
@@ -85,7 +85,8 @@ export default function DashboardPage() {
       totalPortfolio,
       outstandingBalance,
       totalArrears,
-      watchlistAccounts,
+      earlyWarningAccounts,
+      totalRiskAccounts: earlyWarningAccounts + nplAccounts,
       nplAccounts,
       par30,
       par90,
@@ -230,7 +231,7 @@ export default function DashboardPage() {
 
   <p className="mt-3 leading-7 text-slate-700">
     The early warning position shows{" "}
-    <strong>{metrics.watchlistAccounts}</strong> watchlist accounts and{" "}
+    <strong>{metrics.earlyWarningAccounts}</strong> Amber and Red early-warning accounts and{" "}
     <strong>{metrics.nplAccounts}</strong> NPL accounts. Management
     should prioritize Red and NPL accounts, review risky employers and
     branches, and assign follow-up actions through the Management
@@ -265,14 +266,14 @@ export default function DashboardPage() {
 </div>
             <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
               <div className="rounded-2xl bg-white p-5 shadow-sm">
-                <p className="text-sm text-slate-500">Watchlist Accounts</p>
+                <p className="text-sm font-semibold text-slate-800">Early Warning / High Risk</p>
                 <h2 className="mt-2 text-2xl font-bold text-amber-600">
-                  {metrics.watchlistAccounts}
+                  {metrics.earlyWarningAccounts}
                 </h2>
               </div>
 
               <div className="rounded-2xl bg-white p-5 shadow-sm">
-                <p className="text-sm text-slate-500">NPL Accounts</p>
+                <p className="text-sm font-semibold text-slate-800">NPL Accounts</p>
                 <h2 className="mt-2 text-2xl font-bold text-red-600">
                   {metrics.nplAccounts}
                 </h2>

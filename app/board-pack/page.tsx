@@ -2,6 +2,18 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import {
+  BOARD_REPORT_OVERRIDE_FIELDS,
+  defaultInstitutionProfile,
+  loadBoardReportOverrides,
+  loadMasterInstitutionProfile,
+  removeBoardReportOverride,
+  saveBoardReportOverride,
+  type BoardReportOverride,
+  type BoardReportOverrideField,
+  type InstitutionProfile,
+  type MasterProfileSource,
+} from "@/lib/institutionMaster";
 
 type RiskStatus = "Green" | "Amber" | "Red" | "NPL";
 type LoanRecord = {
@@ -33,19 +45,9 @@ type ActionItem = {
   board_visible?: boolean;
   notes?: string;
 };
-type InstitutionProfile = {
-  institutionName?: string;
-  institutionType?: string;
-  reportingMonth?: string;
-  reportingCurrency?: string;
-  riskLead?: string;
-  creditManager?: string;
-  recoveryLead?: string;
-  boardChair?: string;
-};
 type ClarificationRequest = { status?: string };
 
-const blankProfile: InstitutionProfile = {};
+const RISK_REGISTER_PAGE_SIZE = 10;
 
 function readStored<T>(key: string, fallback: T): T {
   try {
@@ -98,17 +100,28 @@ function badge(status: RiskStatus) {
 export default function BoardPackPage() {
   const [records, setRecords] = useState<LoanRecord[]>([]);
   const [actions, setActions] = useState<ActionItem[]>([]);
-  const [profile, setProfile] = useState<InstitutionProfile>(blankProfile);
+  const [masterProfile, setMasterProfile] =
+    useState<InstitutionProfile>(defaultInstitutionProfile);
+  const [profileSource, setProfileSource] = useState<MasterProfileSource>("default");
+  const [profileMessage, setProfileMessage] = useState("Loading master record...");
+  const [overrides, setOverrides] = useState<BoardReportOverride[]>([]);
+  const [showOverridePanel, setShowOverridePanel] = useState(false);
+  const [overrideField, setOverrideField] =
+    useState<BoardReportOverrideField>("institutionName");
+  const [overrideValue, setOverrideValue] = useState("");
+  const [overrideReason, setOverrideReason] = useState("");
+  const [overrideMessage, setOverrideMessage] = useState("");
+  const [savingOverride, setSavingOverride] = useState(false);
   const [clarifications, setClarifications] = useState<ClarificationRequest[]>([]);
+  const [riskSearchInput, setRiskSearchInput] = useState("");
+  const [riskSearch, setRiskSearch] = useState("");
+  const [riskPage, setRiskPage] = useState(1);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     const storedRecords = readStored<LoanRecord[]>("kiprod_loan_records", []);
     const storedActions = readStored<ActionItem[]>("kiprod_action_items", []);
-    const storedProfile = readStored<InstitutionProfile>(
-      "kiprodInstitutionProfile",
-      blankProfile
-    );
     const storedClarifications = readStored<ClarificationRequest[]>(
       "kiprodClarificationRequests",
       []
@@ -117,13 +130,43 @@ export default function BoardPackPage() {
       if (cancelled) return;
       setRecords(storedRecords);
       setActions(storedActions);
-      setProfile(storedProfile);
       setClarifications(storedClarifications);
+    });
+    loadMasterInstitutionProfile().then(async (result) => {
+      if (cancelled) return;
+      setMasterProfile(result.profile);
+      setProfileSource(result.source);
+      setProfileMessage(result.message);
+      try {
+        const loaded = await loadBoardReportOverrides(
+          result.profile.reportingMonth || "Unspecified period"
+        );
+        if (!cancelled) setOverrides(loaded);
+      } catch (error) {
+        if (!cancelled) {
+          setOverrideMessage(
+            `Report overrides unavailable: ${error instanceof Error ? error.message : "Unknown database error"}`
+          );
+        }
+      }
     });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  const overridesByField = useMemo(
+    () => new Map(overrides.map((item) => [item.fieldKey, item])),
+    [overrides]
+  );
+  const profile = useMemo(() => {
+    const effective = { ...masterProfile };
+    overrides.forEach((item) => {
+      effective[item.fieldKey] = item.overrideValue;
+    });
+    return effective;
+  }, [masterProfile, overrides]);
+  const reportingPeriod = masterProfile.reportingMonth || "Unspecified period";
 
   const report = useMemo(() => {
     const totalPortfolio = records.reduce(
@@ -143,11 +186,9 @@ export default function BoardPackPage() {
     const npl = byRisk("NPL");
     const par30 = records.filter((row) => Number(row.days_in_arrears || 0) > 30);
     const par90 = records.filter((row) => Number(row.days_in_arrears || 0) > 90);
-    const watchlist = records.filter(
-      (row) =>
-        row.risk_status !== "Green" ||
-        row.restructured?.toLowerCase() === "yes" ||
-        (row.risk_flags || []).includes("High Exposure")
+    // Official Command Centre definition: Watchlist = Amber + Red + NPL.
+    const watchlist = records.filter((row) =>
+      ["Amber", "Red", "NPL"].includes(row.risk_status)
     );
     const openActions = actions.filter((action) => !isClosed(action));
     const overdueActions = actions.filter(isOverdue);
@@ -157,9 +198,9 @@ export default function BoardPackPage() {
         String(action.escalation_level).includes("Level 3") ||
         String(action.escalation_level).includes("Level 4")
     );
-    const highExposure = records
-      .filter((row) => (row.risk_flags || []).includes("High Exposure"))
-      .sort((a, b) => b.outstanding_balance - a.outstanding_balance);
+    const highExposure = [...watchlist]
+      .sort((a, b) => b.outstanding_balance - a.outstanding_balance)
+      .slice(0, Math.min(10, watchlist.length));
     const openClarifications = clarifications.filter(
       (item) => String(item.status).toLowerCase() !== "closed"
     );
@@ -204,9 +245,50 @@ export default function BoardPackPage() {
   }, [records, actions, clarifications]);
 
   const currency = profile.reportingCurrency || "KES";
+  const filteredRiskRegister = useMemo(() => {
+    const query = riskSearch.trim().toLowerCase();
+    if (!query) return report.watchlist;
+    const terms = query.split(/\s+/).filter(Boolean);
+    return report.watchlist.filter((row) => {
+      const values = [
+        row.member_name,
+        row.member_number,
+        row.loan_account,
+        row.branch,
+        row.loan_product,
+        row.risk_status,
+        row.responsible_officer,
+      ].map((value) => String(value || "").toLowerCase());
+
+      return terms.every((term) =>
+        values.some((value) => {
+          if (term.length > 1) return value.includes(term);
+          return value
+            .split(/[^a-z0-9]+/)
+            .some((word) => word.startsWith(term));
+        })
+      );
+    });
+  }, [report.watchlist, riskSearch]);
+  const riskPageCount = Math.max(
+    1,
+    Math.ceil(filteredRiskRegister.length / RISK_REGISTER_PAGE_SIZE)
+  );
+  const currentRiskPage = Math.min(riskPage, riskPageCount);
+  const paginatedRiskRegister = filteredRiskRegister.slice(
+    (currentRiskPage - 1) * RISK_REGISTER_PAGE_SIZE,
+    currentRiskPage * RISK_REGISTER_PAGE_SIZE
+  );
+  const firstRiskRow = filteredRiskRegister.length
+    ? (currentRiskPage - 1) * RISK_REGISTER_PAGE_SIZE + 1
+    : 0;
+  const lastRiskRow = Math.min(
+    currentRiskPage * RISK_REGISTER_PAGE_SIZE,
+    filteredRiskRegister.length
+  );
   const metric = (label: string, value: string | number, tone = "text-slate-950") => (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+    <div className="board-report-metric rounded-lg border border-slate-200 bg-white p-4">
+      <p className="text-xs font-bold uppercase tracking-wide text-slate-700">
         {label}
       </p>
       <p className={`mt-2 text-xl font-bold ${tone}`}>{value}</p>
@@ -217,14 +299,33 @@ export default function BoardPackPage() {
     title: string,
     rows: ReturnType<typeof groupExposure>
   ) => (
-    <div>
-      <h3 className="font-bold text-slate-900">{title}</h3>
-      <div className="mt-3 space-y-2">
-        {rows.map((row) => (
-          <div key={row.name} className="flex justify-between gap-3 text-sm">
-            <span className="truncate text-slate-700">{row.name}</span>
-            <span className="whitespace-nowrap font-semibold text-slate-950">
-              {row.accounts} · {formatMoney(row.exposure, currency)}
+    <div className="board-report-concentration-card">
+      <h3>{title}</h3>
+      <div className="board-report-concentration-columns">
+        <span>Rank</span>
+        <span>Concentration</span>
+        <span className="board-report-concentration-count-label">Accounts</span>
+        <span className="board-report-concentration-value-label">
+          Outstanding Exposure
+        </span>
+      </div>
+      <div className="board-report-concentration-list">
+        {rows.map((row, index) => (
+          <div key={row.name} className="board-report-concentration-row">
+            <span className="board-report-rank">{index + 1}</span>
+            <span className="board-report-concentration-name" title={row.name}>{row.name}</span>
+            <span
+              className="board-report-concentration-count"
+              aria-label={`${row.accounts} accounts`}
+              title={`${row.accounts} accounts`}
+            >
+              {row.accounts}
+            </span>
+            <span
+              className="board-report-concentration-value"
+              data-label="Outstanding Exposure"
+            >
+              {formatMoney(row.exposure, currency)}
             </span>
           </div>
         ))}
@@ -232,22 +333,498 @@ export default function BoardPackPage() {
     </div>
   );
 
+  const riskTable = (rows: LoanRecord[], emptySearch = "") => (
+    <div className="board-report-table-wrap overflow-x-auto">
+      <table className="board-report-table w-full text-left text-xs">
+        <thead>
+          <tr>
+            {["Member", "Loan Account", "Branch", "Product", "Outstanding", "Arrears", "Days", "Risk", "Officer"].map((head) => (
+              <th key={head}>{head}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="bg-white text-slate-700">
+          {rows.map((row) => (
+            <tr key={row.loan_account} className="border-b border-slate-200">
+              <td className="font-semibold">{row.member_name}</td>
+              <td>{row.loan_account}</td>
+              <td>{row.branch || "—"}</td>
+              <td>{row.loan_product || "—"}</td>
+              <td>{formatMoney(row.outstanding_balance, currency)}</td>
+              <td>{formatMoney(Number(row.arrears_amount || 0), currency)}</td>
+              <td>{row.days_in_arrears || 0}</td>
+              <td><span className={`board-report-risk-badge ${badge(row.risk_status)}`}>{row.risk_status}</span></td>
+              <td>{row.responsible_officer || "Unassigned"}</td>
+            </tr>
+          ))}
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={9} className="py-8 text-center font-semibold text-slate-500">
+                No risk accounts match “{emptySearch}”.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const contextItems: Array<{
+    key: keyof InstitutionProfile;
+    label: string;
+    value: string;
+  }> = [
+    { key: "institutionName", label: "Institution", value: profile.institutionName || "Profile pending" },
+    { key: "institutionType", label: "Institution Type", value: profile.institutionType || "Profile pending" },
+    { key: "reportingMonth", label: "Reporting Month", value: profile.reportingMonth || "Profile pending" },
+    { key: "reportingCurrency", label: "Reporting Currency", value: profile.reportingCurrency || "KES" },
+    { key: "countyRegion", label: "County / Region", value: profile.countyRegion || "Profile pending" },
+    { key: "boardReportingFrequency", label: "Reporting Frequency", value: profile.boardReportingFrequency || "Profile pending" },
+    { key: "riskLead", label: "Risk Lead", value: profile.riskLead || "Profile pending" },
+    { key: "creditManager", label: "Credit Manager", value: profile.creditManager || "Profile pending" },
+    { key: "recoveryLead", label: "Recovery Lead", value: profile.recoveryLead || "Profile pending" },
+    { key: "boardChair", label: "Board Chair / Risk Lead", value: profile.boardChair || "Profile pending" },
+  ];
+
+  async function refreshOverrides() {
+    const loaded = await loadBoardReportOverrides(reportingPeriod);
+    setOverrides(loaded);
+    return loaded;
+  }
+
+  function chooseOverrideField(field: BoardReportOverrideField) {
+    setOverrideField(field);
+    const existing = overridesByField.get(field);
+    setOverrideValue(existing?.overrideValue || masterProfile[field] || "");
+    setOverrideReason(existing?.reason || "");
+    setOverrideMessage("");
+  }
+
+  async function submitOverride(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const nextValue = overrideValue.trim();
+    const reason = overrideReason.trim();
+    if (!nextValue) {
+      setOverrideMessage("Enter the report-specific value.");
+      return;
+    }
+    if (reason.length < 5) {
+      setOverrideMessage("Give a clear reason of at least five characters.");
+      return;
+    }
+    if (nextValue === masterProfile[overrideField]) {
+      setOverrideMessage("This matches the master record; no override is needed.");
+      return;
+    }
+
+    setSavingOverride(true);
+    setOverrideMessage("");
+    try {
+      await saveBoardReportOverride({
+        fieldKey: overrideField,
+        reportingPeriod,
+        masterValue: masterProfile[overrideField],
+        previousReportValue: profile[overrideField],
+        overrideValue: nextValue,
+        reason,
+      });
+      await refreshOverrides();
+      setOverrideMessage("Report override saved and recorded in Audit History.");
+      setOverrideValue("");
+      setOverrideReason("");
+    } catch (error) {
+      setOverrideMessage(
+        `Override could not be saved: ${error instanceof Error ? error.message : "Unknown database error"}`
+      );
+    } finally {
+      setSavingOverride(false);
+    }
+  }
+
+  async function restoreMasterValue(override: BoardReportOverride) {
+    const reason = window.prompt(
+      "Why is this report field being restored to the Institution Profile master value?"
+    );
+    if (!reason) return;
+    if (reason.trim().length < 5) {
+      window.alert("Please give a clear reason of at least five characters.");
+      return;
+    }
+    setSavingOverride(true);
+    setOverrideMessage("");
+    try {
+      await removeBoardReportOverride({
+        override,
+        masterValue: masterProfile[override.fieldKey],
+        reason,
+      });
+      await refreshOverrides();
+      setOverrideMessage("Master value restored and recorded in Audit History.");
+    } catch (error) {
+      setOverrideMessage(
+        `Master value could not be restored: ${error instanceof Error ? error.message : "Unknown database error"}`
+      );
+    } finally {
+      setSavingOverride(false);
+    }
+  }
+
+  const printReport = () => window.print();
+
+  const downloadBoardPackPdf = async () => {
+    if (isDownloading || records.length === 0) return;
+
+    setIsDownloading(true);
+    try {
+      const [{ jsPDF }, { autoTable }] = await Promise.all([
+        import("jspdf"),
+        import("jspdf-autotable"),
+      ]);
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const navy: [number, number, number] = [7, 20, 38];
+      const gold: [number, number, number] = [214, 168, 79];
+      const muted: [number, number, number] = [71, 85, 105];
+      const margin = 14;
+      let y = 30;
+
+      const drawCoverHeader = () => {
+        const width = doc.internal.pageSize.getWidth();
+        doc.setFillColor(...navy);
+        doc.rect(0, 0, width, 22, "F");
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
+        doc.text("KIPROD RISK MANAGEMENT SERVICES", margin, 9);
+        doc.setTextColor(...gold);
+        doc.setFontSize(8);
+        doc.text("EXECUTIVE RISK INTELLIGENCE PLATFORM", margin, 15);
+        doc.setTextColor(255, 255, 255);
+        doc.text("CONFIDENTIAL BOARD PAPER", width - margin, 12, { align: "right" });
+      };
+
+      const ensureSpace = (height: number) => {
+        if (y + height <= doc.internal.pageSize.getHeight() - 18) return;
+        doc.addPage();
+        y = 20;
+      };
+
+      const sectionTitle = (title: string) => {
+        ensureSpace(12);
+        doc.setDrawColor(...gold);
+        doc.setLineWidth(0.7);
+        doc.line(margin, y - 2, margin + 5, y - 2);
+        doc.setTextColor(...navy);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
+        doc.text(title, margin + 8, y);
+        y += 6;
+      };
+
+      const paragraph = (text: string) => {
+        doc.setTextColor(...muted);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        const lines = doc.splitTextToSize(text, 182) as string[];
+        ensureSpace(lines.length * 4.2 + 3);
+        doc.text(lines, margin, y);
+        y += lines.length * 4.2 + 4;
+      };
+
+      const table = (options: Parameters<typeof autoTable>[1]) => {
+        autoTable(doc, {
+          theme: "grid",
+          startY: y,
+          margin: { left: margin, right: margin, top: 16, bottom: 18 },
+          styles: {
+            font: "helvetica",
+            fontSize: 8,
+            cellPadding: 2.1,
+            lineColor: [226, 232, 240],
+            lineWidth: 0.2,
+            textColor: muted,
+          },
+          headStyles: {
+            fillColor: navy,
+            textColor: [255, 255, 255],
+            fontStyle: "bold",
+          },
+          alternateRowStyles: { fillColor: [248, 250, 252] },
+          ...options,
+        });
+        y =
+          (doc as typeof doc & { lastAutoTable?: { finalY: number } }).lastAutoTable
+            ?.finalY || y;
+        y += 6;
+      };
+
+      const pairMetrics = (items: Array<[string, string | number]>) => {
+        const rows: Array<Array<string | number>> = [];
+        for (let index = 0; index < items.length; index += 2) {
+          const left = items[index];
+          const right = items[index + 1] || ["", ""];
+          rows.push([left[0], left[1], right[0], right[1]]);
+        }
+        return rows;
+      };
+
+      drawCoverHeader();
+      doc.setTextColor(...navy);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(19);
+      doc.text("Monthly Credit Risk Board Summary", margin, y);
+      y += 6;
+      doc.setTextColor(...muted);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text("Generated from the Institution Profile and current Command Centre records.", margin, y);
+      y += 9;
+
+      sectionTitle("1. Institution and Reporting Context");
+      table({
+        body: [
+          ["Institution", profile.institutionName || "Profile pending", "Institution Type", profile.institutionType || "Profile pending"],
+          ["Reporting Month", profile.reportingMonth || "Profile pending", "Currency", currency],
+          ["County / Region", profile.countyRegion || "Profile pending", "Reporting Frequency", profile.boardReportingFrequency || "Profile pending"],
+          ["Risk Lead", profile.riskLead || "Profile pending", "Credit Manager", profile.creditManager || "Profile pending"],
+          ["Recovery Lead", profile.recoveryLead || "Profile pending", "Board Chair / Risk Lead", profile.boardChair || "Profile pending"],
+        ],
+        columnStyles: {
+          0: { fontStyle: "bold", fillColor: [241, 245, 249], cellWidth: 34 },
+          1: { cellWidth: 56 },
+          2: { fontStyle: "bold", fillColor: [241, 245, 249], cellWidth: 36 },
+          3: { cellWidth: 46 },
+        },
+      });
+      if (overrides.length > 0) {
+        table({
+          head: [["Controlled Report Override", "Report Value", "Reason"]],
+          body: overrides.map((item) => [
+            BOARD_REPORT_OVERRIDE_FIELDS.find((field) => field.key === item.fieldKey)?.label || item.fieldKey,
+            item.overrideValue,
+            item.reason,
+          ]),
+          columnStyles: {
+            0: { fontStyle: "bold", cellWidth: 48 },
+            1: { cellWidth: 52 },
+            2: { cellWidth: 80 },
+          },
+        });
+        paragraph(
+          "The values above are report-specific overrides. The Institution Profile remains unchanged, and each override is retained in Audit History."
+        );
+      }
+
+      sectionTitle("2. Executive Credit Risk Summary");
+      table({
+        head: [["Metric", "Position", "Metric", "Position"]],
+        body: pairMetrics([
+          ["Total Portfolio", formatMoney(report.totalPortfolio, currency)],
+          ["Outstanding Balance", formatMoney(report.outstanding, currency)],
+          ["Total Arrears", formatMoney(report.arrears, currency)],
+          ["NPL Value", formatMoney(report.nplValue, currency)],
+          ["NPL Accounts", report.npl.length],
+          ["PAR 30 Accounts", report.par30.length],
+          ["PAR 90 Accounts", report.par90.length],
+          ["Watchlist Accounts", report.watchlist.length],
+          ["Open Actions", report.openActions.length],
+          ["Overdue Actions", report.overdueActions.length],
+        ]),
+        columnStyles: {
+          0: { fontStyle: "bold", cellWidth: 42 },
+          1: { cellWidth: 48 },
+          2: { fontStyle: "bold", cellWidth: 42 },
+          3: { cellWidth: 48 },
+        },
+      });
+      paragraph(
+        `The portfolio has ${report.watchlist.length} Watchlist accounts requiring management follow-up: ${report.amber.length} Amber, ${report.red.length} Red and ${report.npl.length} NPL. Management has ${report.openActions.length} open actions, of which ${report.overdueActions.length} are overdue.`
+      );
+
+      sectionTitle("3. Portfolio Health and Early Warning");
+      table({
+        head: [["Position", "Accounts / Value", "Position", "Accounts / Value"]],
+        body: pairMetrics([
+          ["Green Accounts", report.green.length],
+          ["Amber Accounts", report.amber.length],
+          ["Red Accounts", report.red.length],
+          ["NPL Accounts", report.npl.length],
+          ["Portfolio at Risk", formatMoney(report.arrears, currency)],
+          ["Portfolio at Risk Ratio", `${report.outstanding ? ((report.arrears / report.outstanding) * 100).toFixed(1) : "0.0"}%`],
+          ["Restructured Accounts", records.filter((record) => record.restructured?.toLowerCase() === "yes").length],
+          ["High Exposure Accounts", report.highExposure.length],
+        ]),
+      });
+
+      sectionTitle("4. NPL and PAR Position");
+      table({
+        head: [["NPL Value", "NPL Ratio", "PAR 30 Position", "PAR 90 Position"]],
+        body: [[
+          formatMoney(report.nplValue, currency),
+          `${report.nplRatio.toFixed(1)}%`,
+          formatMoney(report.par30Value, currency),
+          formatMoney(report.par90Value, currency),
+        ]],
+      });
+
+      sectionTitle("5. Key Risk Concentrations");
+      table({
+        head: [["Category", "Rank", "Concentration", "Accounts", "Outstanding Exposure"]],
+        body: [
+          ...report.branches.map((row, index) => ["Branch", index + 1, row.name, row.accounts, formatMoney(row.exposure, currency)]),
+          ...report.employers.map((row, index) => ["Employer", index + 1, row.name, row.accounts, formatMoney(row.exposure, currency)]),
+          ...report.sectors.map((row, index) => ["Sector", index + 1, row.name, row.accounts, formatMoney(row.exposure, currency)]),
+          ...report.products.map((row, index) => ["Loan Product", index + 1, row.name, row.accounts, formatMoney(row.exposure, currency)]),
+        ],
+        columnStyles: {
+          0: { fontStyle: "bold", cellWidth: 25 },
+          1: { halign: "center", cellWidth: 13 },
+          3: { halign: "center", cellWidth: 20 },
+          4: { halign: "right", cellWidth: 44 },
+        },
+      });
+
+      sectionTitle("6. Management Actions and Accountability");
+      table({
+        head: [["Total", "Open", "Overdue", "Escalated", "Closed", "Due This Week"]],
+        body: [[
+          actions.length,
+          report.openActions.length,
+          report.overdueActions.length,
+          report.escalatedActions.length,
+          report.closedActions.length,
+          report.dueThisWeek.length,
+        ]],
+        styles: { halign: "center", fontSize: 8, cellPadding: 2.2 },
+      });
+
+      sectionTitle("7. Matters Requiring Board Attention");
+      paragraph(
+        [
+          report.nplValue > 0 ? `Material NPL exposure of ${formatMoney(report.nplValue, currency)} requires recovery oversight.` : "",
+          report.overdueActions.length > 0 ? `${report.overdueActions.length} management actions are overdue and unresolved.` : "",
+          report.highExposure.length > 0 ? `${report.highExposure.length} high-exposure accounts require senior visibility.` : "",
+          report.openClarifications.length > 0 ? `${report.openClarifications.length} clarification requests remain unresolved.` : "",
+        ].filter(Boolean).join(" ") || "No material matters currently meet the Board-attention triggers."
+      );
+
+      sectionTitle("8. Recommended Board Decisions / Guidance");
+      paragraph(
+        "1. Seek management clarification on overdue high-risk actions. 2. Request a recovery update on material NPL accounts. 3. Require a 30-day corrective action plan for deteriorating portfolio areas."
+      );
+
+      doc.addPage("a4", "landscape");
+      const appendixWidth = doc.internal.pageSize.getWidth();
+      const appendixSideMargin = 10;
+      const appendixContentWidth = appendixWidth - appendixSideMargin * 2;
+      doc.setFillColor(...navy);
+      doc.rect(0, 0, appendixWidth, 22, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.text("Appendix: Detailed Risk Register", margin, 10);
+      doc.setTextColor(...gold);
+      doc.setFontSize(8);
+      doc.text(`${report.watchlist.length} Watchlist accounts`, margin, 16);
+      autoTable(doc, {
+        startY: 27,
+        margin: {
+          left: appendixSideMargin,
+          right: appendixSideMargin,
+          top: 27,
+          bottom: 16,
+        },
+        tableWidth: appendixContentWidth,
+        theme: "grid",
+        head: [["Member", "Loan Account", "Branch", "Product", "Outstanding", "Arrears", "Days", "Risk", "Officer"]],
+        body: report.watchlist.map((row) => [
+          row.member_name,
+          row.loan_account,
+          row.branch || "-",
+          row.loan_product || "-",
+          formatMoney(row.outstanding_balance, currency),
+          formatMoney(Number(row.arrears_amount || 0), currency),
+          row.days_in_arrears || 0,
+          row.risk_status,
+          row.responsible_officer || "Unassigned",
+        ]),
+        styles: {
+          font: "helvetica",
+          fontSize: 7,
+          cellPadding: 1.5,
+          lineColor: [226, 232, 240],
+          lineWidth: 0.2,
+          valign: "middle",
+        },
+        headStyles: {
+          fillColor: navy,
+          textColor: [255, 255, 255],
+          fontStyle: "bold",
+          valign: "middle",
+        },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        columnStyles: {
+          0: { cellWidth: 42, fontStyle: "bold" },
+          1: { cellWidth: 31 },
+          2: { cellWidth: 28 },
+          3: { cellWidth: 34 },
+          4: { cellWidth: 35, halign: "right" },
+          5: { cellWidth: 32, halign: "right" },
+          6: { cellWidth: 15, halign: "center" },
+          7: { cellWidth: 19, halign: "center" },
+          8: { cellWidth: 41 },
+        },
+      });
+
+      const pages = doc.getNumberOfPages();
+      for (let page = 1; page <= pages; page += 1) {
+        doc.setPage(page);
+        const width = doc.internal.pageSize.getWidth();
+        const height = doc.internal.pageSize.getHeight();
+        doc.setDrawColor(...gold);
+        doc.setLineWidth(0.35);
+        doc.line(margin, height - 11, width - margin, height - 11);
+        doc.setTextColor(...muted);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(7);
+        doc.text("KIPROD Risk Management Services - Confidential", margin, height - 6);
+        doc.text(`Page ${page} of ${pages}`, width - margin, height - 6, { align: "right" });
+      }
+
+      const institution = (profile.institutionName || "institution")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 50);
+      const period = (profile.reportingMonth || "current-period")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+      doc.save(`${institution || "institution"}-${period || "current-period"}-board-credit-risk-pack.pdf`);
+    } catch (error) {
+      console.error("Failed to download Board Pack PDF", error);
+      window.alert("The PDF could not be generated. Please try again.");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
-    <main className="board-report min-h-screen bg-slate-100 p-4 print:bg-white md:p-6">
+    <main className="board-report min-h-screen bg-[#eef2f5] p-4 md:p-6">
       <section className="mx-auto max-w-6xl">
-        <div className="board-report-masthead mb-6 rounded-2xl bg-[#071426] px-5 py-4 text-white shadow-sm print:rounded-none print:shadow-none">
+        <div className="board-report-paper rounded-2xl bg-white px-5 py-6 shadow-xl md:px-10 md:py-9">
+        <div className="board-report-masthead mb-7 px-1 pb-4">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.2em] text-[#e1b85f]">KIPROD Risk Management Services</p>
             <p className="mt-1 text-sm font-semibold text-slate-200">Executive Risk Intelligence Platform</p>
           </div>
-          <p className="board-report-mark">Board Ready</p>
+          <p className="board-report-mark">Confidential Board Paper</p>
         </div>
         <header className="mb-6 flex flex-col justify-between gap-4 print:mb-4 md:flex-row md:items-end">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-wide text-amber-600">
+            <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#9a6b12]">
               Board Credit Risk Pack
             </p>
-            <h1 className="text-3xl font-bold text-slate-950">
+            <h1 className="mt-1 text-3xl font-black text-[#071426]">
               Monthly Credit Risk Board Summary
             </h1>
             <p className="mt-2 text-slate-600">
@@ -256,10 +833,12 @@ export default function BoardPackPage() {
             </p>
           </div>
           <button
-            onClick={() => window.print()}
-            className="rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white print:hidden"
+            type="button"
+            onClick={printReport}
+            className="board-report-print-button inline-flex items-center justify-center rounded-lg border border-[#071426] bg-[#071426] px-5 py-3 text-sm font-black text-white shadow-md transition-colors hover:bg-[#102b48] print:hidden"
+            style={{ backgroundColor: "#071426", color: "#ffffff" }}
           >
-            Print / Save as PDF
+            Print Report
           </button>
         </header>
 
@@ -287,31 +866,135 @@ export default function BoardPackPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            <section className="rounded-2xl bg-slate-950 p-6 text-white shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-widest text-amber-400">
-                1. Institution and Reporting Context
-              </p>
+            <section className="board-report-section board-report-context">
+              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                <div>
+                  <h2 className="board-report-heading">1. Institution and Reporting Context</h2>
+                  <p className="mt-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Source: Institution Profile master record · {profileSource === "supabase" ? "Supabase synced" : "Local fallback"}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500 print:hidden">{profileMessage}</p>
+                </div>
+                <Link href="/institution-profile" className="board-report-profile-link print:hidden">
+                  Edit Institution Profile
+                </Link>
+              </div>
               <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {[
-                  ["Institution", profile.institutionName || "Not completed"],
-                  ["Institution Type", profile.institutionType || "Not completed"],
-                  ["Reporting Month", profile.reportingMonth || "Not completed"],
-                  ["Reporting Currency", currency],
-                  ["Risk Lead", profile.riskLead || "Not assigned"],
-                  ["Credit Manager", profile.creditManager || "Not assigned"],
-                  ["Recovery Lead", profile.recoveryLead || "Not assigned"],
-                  ["Board Chair / Risk Lead", profile.boardChair || "Not assigned"],
-                ].map(([label, value]) => (
-                  <div key={label}>
-                    <p className="text-xs text-slate-400">{label}</p>
-                    <p className="mt-1 font-semibold">{value}</p>
+                {contextItems.map((item) => {
+                  const reportOverride = overridesByField.get(
+                    item.key as BoardReportOverrideField
+                  );
+                  return (
+                  <div key={item.label} className="board-report-context-item">
+                    <p>{item.label}</p>
+                    <strong>{item.value}</strong>
+                    {reportOverride && (
+                      <span className="mt-2 inline-flex w-fit rounded-full bg-[#fff2cf] px-2 py-1 text-[10px] font-black uppercase tracking-wide text-[#7a5310]">
+                        Report override
+                      </span>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
+              </div>
+              <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 print:hidden">
+                <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                  <div>
+                    <h3 className="text-sm font-black text-[#071426]">
+                      Controlled report-specific overrides
+                    </h3>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">
+                      Master data stays unchanged. Every override requires a reason and is written to Audit History.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowOverridePanel((value) => !value);
+                      chooseOverrideField(overrideField);
+                    }}
+                    className="rounded-lg bg-[#071426] px-4 py-2.5 text-xs font-black text-white"
+                    style={{ backgroundColor: "#071426", color: "#ffffff" }}
+                  >
+                    {showOverridePanel ? "Close Override Form" : "Add / Edit Override"}
+                  </button>
+                </div>
+
+                {overrides.length > 0 && (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    {overrides.map((item) => (
+                      <div key={item.id} className="rounded-lg border border-amber-200 bg-white p-3">
+                        <p className="text-xs font-black uppercase tracking-wide text-amber-800">
+                          {BOARD_REPORT_OVERRIDE_FIELDS.find((field) => field.key === item.fieldKey)?.label}
+                        </p>
+                        <p className="mt-1 font-bold text-slate-950">{item.overrideValue}</p>
+                        <p className="mt-1 text-xs text-slate-600">Reason: {item.reason}</p>
+                        <button
+                          type="button"
+                          disabled={savingOverride}
+                          onClick={() => restoreMasterValue(item)}
+                          className="mt-3 text-xs font-black text-[#8a260f] underline disabled:opacity-50"
+                        >
+                          Restore master value
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {showOverridePanel && (
+                  <form onSubmit={submitOverride} className="mt-4 grid gap-4 rounded-xl border border-slate-200 bg-white p-4">
+                    <label className="grid gap-2 text-xs font-black uppercase tracking-wide text-slate-700">
+                      Report field
+                      <select
+                        value={overrideField}
+                        onChange={(event) => chooseOverrideField(event.target.value as BoardReportOverrideField)}
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-3 text-sm font-semibold normal-case tracking-normal text-slate-950"
+                      >
+                        {BOARD_REPORT_OVERRIDE_FIELDS.map((field) => (
+                          <option key={field.key} value={field.key}>{field.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600">
+                      Master value: <strong className="text-slate-950">{masterProfile[overrideField] || "Not set"}</strong>
+                    </div>
+                    <label className="grid gap-2 text-xs font-black uppercase tracking-wide text-slate-700">
+                      Report-specific value
+                      <input
+                        value={overrideValue}
+                        onChange={(event) => setOverrideValue(event.target.value)}
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-3 text-sm font-semibold normal-case tracking-normal text-slate-950"
+                        placeholder="Value to use in this Board Pack"
+                      />
+                    </label>
+                    <label className="grid gap-2 text-xs font-black uppercase tracking-wide text-slate-700">
+                      Reason for override
+                      <textarea
+                        value={overrideReason}
+                        onChange={(event) => setOverrideReason(event.target.value)}
+                        className="min-h-24 rounded-lg border border-slate-300 bg-white px-3 py-3 text-sm font-semibold normal-case tracking-normal text-slate-950"
+                        placeholder="Explain why this reporting period needs a different value"
+                      />
+                    </label>
+                    <button
+                      type="submit"
+                      disabled={savingOverride}
+                      className="w-fit rounded-lg bg-[#d6a84f] px-5 py-3 text-sm font-black text-[#071426] disabled:opacity-60"
+                      style={{ backgroundColor: "#d6a84f", color: "#071426" }}
+                    >
+                      {savingOverride ? "Saving..." : "Save Override & Audit"}
+                    </button>
+                  </form>
+                )}
+                {overrideMessage && (
+                  <p className="mt-3 text-xs font-bold text-slate-700" role="status">{overrideMessage}</p>
+                )}
               </div>
             </section>
 
-            <section className="rounded-2xl bg-white p-6 shadow-sm">
-              <h2 className="text-xl font-bold text-slate-950">
+            <section className="board-report-section">
+              <h2 className="board-report-heading">
                 2. Executive Credit Risk Summary
               </h2>
               <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -326,11 +1009,12 @@ export default function BoardPackPage() {
                 {metric("Open Actions", report.openActions.length)}
                 {metric("Overdue Actions", report.overdueActions.length, "text-red-700")}
               </div>
-              <p className="mt-5 leading-7 text-slate-700">
+              <p className="board-report-narrative mt-5 leading-7 text-slate-700">
                 The portfolio has <strong>{report.watchlist.length}</strong>{" "}
-                accounts requiring management attention, including{" "}
+                Watchlist accounts requiring management follow-up, comprising{" "}
+                <strong>{report.amber.length} Amber</strong>,{" "}
                 <strong>{report.red.length} Red</strong> and{" "}
-                <strong>{report.npl.length} NPL</strong> accounts. Management has{" "}
+                <strong>{report.npl.length} NPL</strong>. Management has{" "}
                 <strong>{report.openActions.length} open actions</strong>, of
                 which <strong>{report.overdueActions.length}</strong> are
                 overdue. Board attention should remain focused on material NPL
@@ -339,9 +1023,9 @@ export default function BoardPackPage() {
               </p>
             </section>
 
-            <section className="grid gap-6 lg:grid-cols-2">
-              <div className="rounded-2xl bg-white p-6 shadow-sm">
-                <h2 className="text-xl font-bold text-slate-950">3. Portfolio Health Overview</h2>
+            <section className="board-report-pair grid gap-6 lg:grid-cols-2">
+              <div className="board-report-section">
+                <h2 className="board-report-heading">3. Portfolio Health Overview</h2>
                 <div className="mt-5 grid grid-cols-2 gap-3">
                   {metric("Green Accounts", report.green.length, "text-emerald-700")}
                   {metric("Amber Accounts", report.amber.length, "text-amber-700")}
@@ -354,8 +1038,8 @@ export default function BoardPackPage() {
                   )}
                 </div>
               </div>
-              <div className="rounded-2xl bg-white p-6 shadow-sm">
-                <h2 className="text-xl font-bold text-slate-950">
+              <div className="board-report-section">
+                <h2 className="board-report-heading">
                   4. Early Warning and Watchlist Summary
                 </h2>
                 <ul className="mt-5 space-y-3 text-sm leading-6 text-slate-700">
@@ -368,8 +1052,8 @@ export default function BoardPackPage() {
               </div>
             </section>
 
-            <section className="rounded-2xl bg-white p-6 shadow-sm">
-              <h2 className="text-xl font-bold text-slate-950">5. NPL and PAR Position</h2>
+            <section className="board-report-section">
+              <h2 className="board-report-heading">5. NPL and PAR Position</h2>
               <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {metric("NPL Value", formatMoney(report.nplValue, currency), "text-red-700")}
                 {metric("NPL Ratio", `${report.nplRatio.toFixed(1)}%`, "text-red-700")}
@@ -382,9 +1066,9 @@ export default function BoardPackPage() {
               </p>
             </section>
 
-            <section className="rounded-2xl bg-white p-6 shadow-sm">
-              <h2 className="text-xl font-bold text-slate-950">6. Key Risk Concentrations</h2>
-              <div className="mt-5 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            <section className="board-report-section">
+              <h2 className="board-report-heading">6. Key Risk Concentrations</h2>
+              <div className="board-report-concentration-grid mt-5">
                 {concentration("Branches", report.branches)}
                 {concentration("Employers", report.employers)}
                 {concentration("Sectors", report.sectors)}
@@ -399,8 +1083,8 @@ export default function BoardPackPage() {
               )}
             </section>
 
-            <section className="rounded-2xl bg-white p-6 shadow-sm">
-              <h2 className="text-xl font-bold text-slate-950">
+            <section className="board-report-section">
+              <h2 className="board-report-heading">
                 7. Management Actions and Accountability
               </h2>
               <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -413,9 +1097,9 @@ export default function BoardPackPage() {
               </div>
             </section>
 
-            <section className="grid gap-6 lg:grid-cols-2">
-              <div className="rounded-2xl border-l-4 border-red-600 bg-white p-6 shadow-sm">
-                <h2 className="text-xl font-bold text-slate-950">
+            <section className="board-report-pair grid gap-6 lg:grid-cols-2">
+              <div className="board-report-section border-l-4 border-red-600">
+                <h2 className="board-report-heading">
                   8. Matters Requiring Board Attention
                 </h2>
                 <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-700">
@@ -426,8 +1110,8 @@ export default function BoardPackPage() {
                   {report.nplValue === 0 && report.overdueActions.length === 0 && report.highExposure.length === 0 && report.openClarifications.length === 0 && <li>No material matters currently meet the Board-attention triggers.</li>}
                 </ul>
               </div>
-              <div className="rounded-2xl border-l-4 border-amber-400 bg-white p-6 shadow-sm">
-                <h2 className="text-xl font-bold text-slate-950">
+              <div className="board-report-section border-l-4 border-[#d6a84f]">
+                <h2 className="board-report-heading">
                   9. Recommended Board Decisions / Guidance
                 </h2>
                 <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-700">
@@ -438,56 +1122,109 @@ export default function BoardPackPage() {
               </div>
             </section>
 
-            <section className="rounded-2xl bg-white p-6 shadow-sm">
-              <h2 className="text-xl font-bold text-slate-950">
+            <section className="board-report-section board-report-appendix">
+              <h2 className="board-report-heading">
                 10. Appendix: Detailed Risk Register
               </h2>
               <p className="mt-2 text-sm text-slate-600">
                 Account-level detail is retained here so the main report remains
                 governance-level.
               </p>
-              <div className="mt-4 overflow-x-auto pb-3">
-                <table className="min-w-[1500px] text-left text-sm">
-                  <thead className="bg-slate-950 text-white">
-                    <tr>
-                      {["Member Name", "Member Number", "Loan Account", "Branch", "Employer", "Sector", "Loan Product", "Outstanding", "Arrears", "Days", "Risk Class", "Risk Flags", "Officer"].map((head) => (
-                        <th key={head} className="whitespace-nowrap px-4 py-3">{head}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white text-slate-700">
-                    {report.watchlist.map((row) => (
-                      <tr key={row.loan_account} className="border-b border-slate-200">
-                        <td className="px-4 py-3 font-semibold">{row.member_name}</td>
-                        <td className="px-4 py-3">{row.member_number || "—"}</td>
-                        <td className="px-4 py-3">{row.loan_account}</td>
-                        <td className="px-4 py-3">{row.branch || "—"}</td>
-                        <td className="px-4 py-3">{row.employer || "—"}</td>
-                        <td className="px-4 py-3">{row.sector || "—"}</td>
-                        <td className="px-4 py-3">{row.loan_product || "—"}</td>
-                        <td className="px-4 py-3">{formatMoney(row.outstanding_balance, currency)}</td>
-                        <td className="px-4 py-3">{formatMoney(Number(row.arrears_amount || 0), currency)}</td>
-                        <td className="px-4 py-3">{row.days_in_arrears || 0}</td>
-                        <td className="px-4 py-3"><span className={`rounded-full px-3 py-1 text-xs font-bold ${badge(row.risk_status)}`}>{row.risk_status}</span></td>
-                        <td className="px-4 py-3">{(row.risk_flags || []).join(", ") || "—"}</td>
-                        <td className="px-4 py-3">{row.responsible_officer || "Unassigned"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <form
+                className="board-report-register-search mt-4 print:hidden"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setRiskSearch(riskSearchInput.trim());
+                  setRiskPage(1);
+                }}
+              >
+                <label htmlFor="board-risk-search">Search risk register</label>
+                <div className="board-report-search-controls">
+                  <input
+                    id="board-risk-search"
+                    type="search"
+                    value={riskSearchInput}
+                    onChange={(event) => setRiskSearchInput(event.target.value)}
+                    placeholder="Search member, account, branch, product, risk or officer"
+                  />
+                  <button type="submit">Search</button>
+                  {(riskSearch || riskSearchInput) && (
+                    <button
+                      type="button"
+                      className="board-report-search-clear"
+                      onClick={() => {
+                        setRiskSearchInput("");
+                        setRiskSearch("");
+                        setRiskPage(1);
+                      }}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <p>{filteredRiskRegister.length} of {report.watchlist.length} risk accounts shown</p>
+              </form>
+              <div className="board-report-screen-register mt-4 print:hidden">
+                {riskTable(paginatedRiskRegister, riskSearch)}
+                {filteredRiskRegister.length > 0 && (
+                  <nav
+                    className="board-report-pagination mt-4 flex flex-col gap-3 border-t border-slate-200 pt-4 text-xs font-extrabold text-slate-600 sm:flex-row sm:items-center sm:justify-between"
+                    aria-label="Risk register pagination"
+                  >
+                    <p className="m-0">
+                      Showing {firstRiskRow}–{lastRiskRow} of {filteredRiskRegister.length}
+                    </p>
+                    <div className="flex items-center justify-between gap-3 sm:justify-end">
+                      <button
+                        type="button"
+                        disabled={currentRiskPage === 1}
+                        onClick={() => setRiskPage((page) => Math.max(1, page - 1))}
+                        className="min-h-11 min-w-24 rounded-lg border px-4 py-2.5 font-black shadow-sm transition-colors disabled:cursor-not-allowed disabled:shadow-none"
+                        style={{
+                          backgroundColor: currentRiskPage === 1 ? "#e2e8f0" : "#071426",
+                          borderColor: currentRiskPage === 1 ? "#cbd5e1" : "#071426",
+                          color: currentRiskPage === 1 ? "#64748b" : "#ffffff",
+                        }}
+                      >
+                        Previous
+                      </button>
+                      <span className="min-w-24 text-center font-black text-[#071426]">
+                        Page {currentRiskPage} of {riskPageCount}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={currentRiskPage === riskPageCount}
+                        onClick={() => setRiskPage((page) => Math.min(riskPageCount, page + 1))}
+                        className="min-h-11 min-w-24 rounded-lg border px-4 py-2.5 font-black shadow-sm transition-colors disabled:cursor-not-allowed disabled:shadow-none"
+                        style={{
+                          backgroundColor: currentRiskPage === riskPageCount ? "#e2e8f0" : "#071426",
+                          borderColor: currentRiskPage === riskPageCount ? "#cbd5e1" : "#071426",
+                          color: currentRiskPage === riskPageCount ? "#64748b" : "#ffffff",
+                        }}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </nav>
+                )}
+              </div>
+              <div className="board-report-print-register hidden print:block">
+                {riskTable(report.watchlist)}
               </div>
             </section>
 
             <div className="flex flex-wrap gap-3 print:hidden">
               <Link
                 href="/executive-dashboard"
-                className="rounded-full border border-slate-300 bg-white px-5 py-3 font-semibold text-slate-900 shadow-sm transition-colors hover:border-slate-950 hover:bg-slate-100"
+                className="inline-flex min-h-12 items-center justify-center rounded-full border border-[#071426] bg-[#071426] px-6 py-3 font-black text-white shadow-md transition-colors hover:bg-[#102b48]"
+                style={{ backgroundColor: "#071426", color: "#ffffff" }}
               >
                 Executive Cockpit
               </Link>
               <Link
                 href="/action-tracker"
-                className="rounded-full border border-slate-300 bg-white px-5 py-3 font-semibold text-slate-900 shadow-sm transition-colors hover:border-slate-950 hover:bg-slate-100"
+                className="inline-flex min-h-12 items-center justify-center rounded-full border border-[#b78322] bg-[#d6a84f] px-6 py-3 font-black text-[#071426] shadow-md transition-colors hover:bg-[#e1b85f]"
+                style={{ backgroundColor: "#d6a84f", color: "#071426" }}
               >
                 Execution Tracker
               </Link>
@@ -498,9 +1235,27 @@ export default function BoardPackPage() {
                 Board Oversight
               </Link>
             </div>
+            <footer className="board-report-footer">
+              <span>KIPROD Risk Management Services</span>
+              <span>Confidential • Board Credit Risk Pack</span>
+            </footer>
           </div>
         )}
+        </div>
       </section>
+      {records.length > 0 && (
+        <button
+          type="button"
+          onClick={downloadBoardPackPdf}
+          disabled={isDownloading}
+          className="board-report-download-fab fixed bottom-4 right-4 z-40 inline-flex min-h-12 items-center justify-center gap-2 rounded-full border-2 border-[#b78322] bg-[#d6a84f] px-5 py-3 text-sm font-black text-[#071426] shadow-xl print:hidden disabled:cursor-wait disabled:opacity-70"
+          style={{ backgroundColor: "#d6a84f", color: "#071426" }}
+          aria-label="Download Board Credit Risk Pack as PDF"
+        >
+          <span aria-hidden="true">↓</span>
+          {isDownloading ? "Preparing PDF..." : "Download PDF"}
+        </button>
+      )}
     </main>
   );
 }

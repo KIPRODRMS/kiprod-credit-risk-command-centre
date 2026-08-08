@@ -2,50 +2,34 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-
-type InstitutionProfile = {
-  institutionName: string;
-  institutionType: string;
-  countyRegion: string;
-  primaryContact: string;
-  reportingMonth: string;
-  boardReportingFrequency: string;
-  reportingCurrency: string;
-  riskLead: string;
-  creditManager: string;
-  recoveryLead: string;
-  boardChair: string;
-  governanceMode: string;
-};
-
-const defaultProfile: InstitutionProfile = {
-  institutionName: "",
-  institutionType: "SACCO",
-  countyRegion: "",
-  primaryContact: "",
-  reportingMonth: "",
-  boardReportingFrequency: "Monthly",
-  reportingCurrency: "KES",
-  riskLead: "",
-  creditManager: "",
-  recoveryLead: "",
-  boardChair: "",
-  governanceMode: "Management prepares. Board oversees.",
-};
+import {
+  defaultInstitutionProfile,
+  loadMasterInstitutionProfile,
+  saveMasterInstitutionProfile,
+  type InstitutionProfile,
+  type MasterProfileSource,
+} from "@/lib/institutionMaster";
 
 export default function InstitutionProfilePage() {
-  const [profile, setProfile] = useState<InstitutionProfile>(defaultProfile);
+  const [profile, setProfile] = useState<InstitutionProfile>(defaultInstitutionProfile);
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [source, setSource] = useState<MasterProfileSource>("default");
+  const [message, setMessage] = useState("Loading shared master record...");
 
   useEffect(() => {
-    const stored = localStorage.getItem("kiprodInstitutionProfile");
-    if (stored) {
-      try {
-        setProfile({ ...defaultProfile, ...JSON.parse(stored) });
-      } catch {
-        setProfile(defaultProfile);
-      }
-    }
+    let active = true;
+    loadMasterInstitutionProfile().then((result) => {
+      if (!active) return;
+      setProfile(result.profile);
+      setSource(result.source);
+      setMessage(result.message);
+      setLoading(false);
+    });
+    return () => {
+      active = false;
+    };
   }, []);
 
   function updateField(field: keyof InstitutionProfile, value: string) {
@@ -56,9 +40,17 @@ export default function InstitutionProfilePage() {
     setSaved(false);
   }
 
-  function saveProfile() {
-    localStorage.setItem("kiprodInstitutionProfile", JSON.stringify(profile));
-    setSaved(true);
+  async function saveProfile() {
+    setSaving(true);
+    setSaved(false);
+    const result = await saveMasterInstitutionProfile(profile);
+    if (result.profile) {
+      setProfile(result.profile);
+    }
+    setSource(result.savedToDatabase ? "supabase" : "local");
+    setMessage(result.message);
+    setSaved(result.savedToDatabase);
+    setSaving(false);
   }
 
   return (
@@ -67,9 +59,19 @@ export default function InstitutionProfilePage() {
         <p style={styles.kicker}>KIPROD Credit Risk Command Centre</p>
         <h1 style={styles.title}>Institution Profile</h1>
         <p style={styles.subtitle}>
-          Configure the institution identity, reporting context, and governance
-          ownership before management and board reporting begins.
+          This is the Command Centre master institutional record. Its identity,
+          reporting period and governance ownership flow into every connected
+          report and oversight module.
         </p>
+        <div
+          style={source === "supabase" ? styles.syncActive : styles.syncWarning}
+          role="status"
+        >
+          <strong>
+            {source === "supabase" ? "Shared master record active" : "Local fallback active"}
+          </strong>
+          <span>{message}</span>
+        </div>
       </section>
 
       <section style={styles.card}>
@@ -253,15 +255,22 @@ export default function InstitutionProfilePage() {
           </div>
         </div>
 
-        <button style={styles.button} onClick={saveProfile}>
-          Save Institution Profile
+        <button
+          style={{
+            ...styles.button,
+            ...(loading || saving ? styles.buttonDisabled : {}),
+          }}
+          onClick={saveProfile}
+          disabled={loading || saving}
+        >
+          {saving ? "Saving master record..." : "Save Institution Profile"}
         </button>
 
         {saved && (
           <div style={styles.savedPanel} role="status">
             <p style={styles.success}>
-              Institution Profile saved successfully. You can now proceed to
-              Portfolio Upload.
+              Shared master record saved successfully. The Board Pack and
+              Command Centre header will now use these details.
             </p>
             <div style={styles.actions}>
               <Link href="/portfolio-upload" style={styles.primaryLink}>
@@ -313,6 +322,34 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: "20px",
     padding: "28px",
     maxWidth: "1000px",
+  },
+  syncActive: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "4px",
+    marginTop: "18px",
+    maxWidth: "760px",
+    padding: "14px 16px",
+    borderRadius: "12px",
+    background: "rgba(35,134,54,0.12)",
+    border: "1px solid rgba(126,231,135,0.28)",
+    color: "#c9f7d0",
+    fontSize: "13px",
+    lineHeight: 1.5,
+  },
+  syncWarning: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "4px",
+    marginTop: "18px",
+    maxWidth: "760px",
+    padding: "14px 16px",
+    borderRadius: "12px",
+    background: "rgba(214,168,79,0.1)",
+    border: "1px solid rgba(214,168,79,0.35)",
+    color: "#f5dca9",
+    fontSize: "13px",
+    lineHeight: 1.5,
   },
   section: {
     paddingBottom: "28px",
@@ -407,6 +444,10 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "13px 22px",
     fontWeight: 800,
     cursor: "pointer",
+  },
+  buttonDisabled: {
+    cursor: "wait",
+    opacity: 0.65,
   },
   success: {
     color: "#7ee787",

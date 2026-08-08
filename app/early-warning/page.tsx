@@ -72,6 +72,23 @@ function hasFlag(record: LoanRecord, flag: string) {
   return record.risk_flags?.includes(flag) ?? false;
 }
 
+function applyHighExposureRule(records: LoanRecord[]) {
+  const topAccounts = new Set(
+    records
+      .filter((record) => record.risk_status !== "Green")
+      .sort((a, b) => b.outstanding_balance - a.outstanding_balance)
+      .slice(0, 10)
+      .map((record) => record.loan_account)
+  );
+
+  return records.map((record) => ({
+    ...record,
+    risk_flags: topAccounts.has(record.loan_account)
+      ? Array.from(new Set([...(record.risk_flags || []), "High Exposure"]))
+      : (record.risk_flags || []).filter((flag) => flag !== "High Exposure"),
+  }));
+}
+
 function isRestructured(record: LoanRecord) {
   return record.restructured === "Yes" || hasFlag(record, "Restructured Risk");
 }
@@ -126,7 +143,7 @@ export default function EarlyWarningPage() {
 
       try {
         const parsed = JSON.parse(saved);
-        setRecords(Array.isArray(parsed) ? parsed : []);
+        setRecords(Array.isArray(parsed) ? applyHighExposureRule(parsed) : []);
       } catch {
         setRecords([]);
       }

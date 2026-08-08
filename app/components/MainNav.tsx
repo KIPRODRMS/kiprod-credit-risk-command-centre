@@ -4,6 +4,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import {
+  defaultInstitutionProfile,
+  INSTITUTION_PROFILE_UPDATED_EVENT,
+  loadMasterInstitutionProfile,
+  type InstitutionProfile,
+} from "@/lib/institutionMaster";
 
 const navItems = [
   { label: "Home", href: "/" },
@@ -24,6 +30,27 @@ const navItems = [
 export default function MainNav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [profile, setProfile] = useState<InstitutionProfile>(defaultInstitutionProfile);
+
+  useEffect(() => {
+    let active = true;
+    const refreshProfile = () => {
+      loadMasterInstitutionProfile().then((result) => {
+        if (active) setProfile(result.profile);
+      });
+    };
+    const receiveProfile = (event: Event) => {
+      const next = (event as CustomEvent<InstitutionProfile>).detail;
+      if (next) setProfile(next);
+      else refreshProfile();
+    };
+    refreshProfile();
+    window.addEventListener(INSTITUTION_PROFILE_UPDATED_EVENT, receiveProfile);
+    return () => {
+      active = false;
+      window.removeEventListener(INSTITUTION_PROFILE_UPDATED_EVENT, receiveProfile);
+    };
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -68,6 +95,18 @@ export default function MainNav() {
               </span>
             </span>
           </Link>
+
+          <div className="hidden min-w-0 flex-1 items-center justify-center sm:flex 2xl:justify-start">
+            <div className="max-w-md truncate rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-slate-200">
+              <strong className="text-white">
+                {profile.institutionName || "Institution Profile pending"}
+              </strong>
+              <span className="mx-2 text-[#d6a84f]">•</span>
+              <span>{profile.reportingMonth || "Reporting month pending"}</span>
+              <span className="mx-2 text-[#d6a84f]">•</span>
+              <span>{profile.reportingCurrency || "KES"}</span>
+            </div>
+          </div>
 
           <button
             type="button"
@@ -139,6 +178,15 @@ export default function MainNav() {
           >
             ×
           </button>
+        </div>
+
+        <div className="border-b border-slate-800 bg-white/[0.035] px-5 py-3 text-xs leading-5 text-slate-300">
+          <p className="font-black text-white">
+            {profile.institutionName || "Institution Profile pending"}
+          </p>
+          <p>
+            {profile.reportingMonth || "Reporting month pending"} · {profile.reportingCurrency || "KES"}
+          </p>
         </div>
 
         <nav className="grid flex-1 grid-cols-1 gap-2 overflow-y-auto p-4 sm:grid-cols-2 lg:grid-cols-1" aria-label="Menu links">

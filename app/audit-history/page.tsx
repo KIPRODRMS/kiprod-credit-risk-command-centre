@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import {
+  getCurrentActor,
+  getInstitutionId,
+} from "@/lib/institutionMaster";
 import Pagination from "../components/Pagination";
 import RegisterSearch from "../components/RegisterSearch";
 
@@ -17,33 +22,6 @@ type AuditLog = {
   note: string;
 };
 
-const sampleAuditLogs: AuditLog[] = [
-  {
-    id: "audit-001",
-    createdAt: new Date().toISOString(),
-    module: "Action Tracker",
-    actionType: "ACTION_STATUS_CHANGED",
-    recordRef: "Sample Loan Account",
-    oldValue: "Pending",
-    newValue: "In Progress",
-    role: "Risk Manager",
-    user: "MVP User",
-    note: "Sample audit record showing how status changes will be preserved.",
-  },
-  {
-    id: "audit-002",
-    createdAt: new Date().toISOString(),
-    module: "Board Oversight",
-    actionType: "BOARD_REVIEWED_RISK",
-    recordRef: "Sample NPL Exposure",
-    oldValue: "Not reviewed",
-    newValue: "Reviewed by board",
-    role: "Board Viewer / Board Member",
-    user: "MVP User",
-    note: "Sample board oversight record for governance visibility.",
-  },
-];
-
 function readAuditLogs(): AuditLog[] {
   const raw = localStorage.getItem("kiprodAuditLogs");
 
@@ -55,10 +33,6 @@ function readAuditLogs(): AuditLog[] {
   } catch {
     return [];
   }
-}
-
-function saveAuditLogs(logs: AuditLog[]) {
-  localStorage.setItem("kiprodAuditLogs", JSON.stringify(logs));
 }
 
 function formatDate(value: string): string {
@@ -75,12 +49,81 @@ export default function AuditHistoryPage() {
   const [filterAction, setFilterAction] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("Loading protected audit records...");
   const pageSize = 10;
 
-  useEffect(() => {
-    const existingLogs = readAuditLogs();
-    setLogs(existingLogs);
+  const loadAuditHistory = useCallback(async () => {
+    setLoading(true);
+    const institutionId = getInstitutionId();
+    const localLogs = readAuditLogs();
+
+    if (!institutionId) {
+      setLogs(localLogs);
+      setMessage(
+        "Database audit history is waiting for NEXT_PUBLIC_DEFAULT_INSTITUTION_ID. Local fallback is active."
+      );
+      setLoading(false);
+      return;
+    }
+
+    if (localLogs.length > 0) {
+      const actor = await getCurrentActor();
+      const { error: migrationError } = await supabase.from("audit_logs").insert(
+        localLogs.map((log) => ({
+          institution_id: institutionId,
+          module: log.module,
+          action_type: log.actionType,
+          record_ref: log.recordRef,
+          old_value: log.oldValue,
+          new_value: log.newValue,
+          role: log.role || actor.role,
+          user_name: log.user || actor.name,
+          note: log.note,
+          created_at: log.createdAt,
+        }))
+      );
+      if (!migrationError) localStorage.removeItem("kiprodAuditLogs");
+    }
+
+    const { data, error } = await supabase
+      .from("audit_logs")
+      .select(
+        "id,created_at,module,action_type,record_ref,old_value,new_value,role,user_name,note"
+      )
+      .eq("institution_id", institutionId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      setLogs(localLogs);
+      setMessage(`Database audit history unavailable: ${error.message}`);
+      setLoading(false);
+      return;
+    }
+
+    setLogs(
+      (data || []).map((row) => ({
+        id: String(row.id),
+        createdAt: String(row.created_at || ""),
+        module: String(row.module || ""),
+        actionType: String(row.action_type || ""),
+        recordRef: String(row.record_ref || ""),
+        oldValue: String(row.old_value || ""),
+        newValue: String(row.new_value || ""),
+        role: String(row.role || ""),
+        user: String(row.user_name || ""),
+        note: String(row.note || ""),
+      }))
+    );
+    setMessage(
+      "Showing the shared, append-only Supabase audit trail for this institution."
+    );
+    setLoading(false);
   }, []);
+
+  useEffect(() => {
+    void loadAuditHistory();
+  }, [loadAuditHistory]);
 
   const modules = useMemo(() => {
     const uniqueModules = Array.from(new Set(logs.map((log) => log.module)));
@@ -111,33 +154,6 @@ export default function AuditHistoryPage() {
   useEffect(() => setPage(1), [filterModule, filterAction, searchQuery]);
   const paginatedLogs = filteredLogs.slice((page - 1) * pageSize, page * pageSize);
 
-  function addSampleLogs() {
-    const existingLogs = readAuditLogs();
-
-    const newLogs = sampleAuditLogs.map((log) => ({
-      ...log,
-      id: `${log.id}-${Date.now()}`,
-      createdAt: new Date().toISOString(),
-      role: localStorage.getItem("kiprodCurrentRole") || log.role,
-    }));
-
-    const updatedLogs = [...newLogs, ...existingLogs];
-
-    saveAuditLogs(updatedLogs);
-    setLogs(updatedLogs);
-  }
-
-  function clearAuditLogs() {
-    const confirmed = window.confirm(
-      "This will clear MVP audit history from localStorage. Continue?"
-    );
-
-    if (!confirmed) return;
-
-    localStorage.removeItem("kiprodAuditLogs");
-    setLogs([]);
-  }
-
   return (
     <main style={styles.page}>
       <section style={styles.header}>
@@ -152,14 +168,15 @@ export default function AuditHistoryPage() {
         </p>
 
         <div style={styles.actions}>
-          <button style={styles.primaryButton} onClick={addSampleLogs}>
-            Add Sample Audit Logs
-          </button>
-
-          <button style={styles.secondaryButton} onClick={clearAuditLogs}>
-            Clear MVP Logs
+          <button
+            style={styles.primaryButton}
+            onClick={() => void loadAuditHistory()}
+            disabled={loading}
+          >
+            {loading ? "Refreshing..." : "Refresh Audit History"}
           </button>
         </div>
+        <p style={styles.syncMessage} role="status">{message}</p>
       </section>
 
       <section style={styles.metricsGrid}>
@@ -211,15 +228,14 @@ export default function AuditHistoryPage() {
         <h2 style={styles.sectionTitle}>Audit Log Records</h2>
 
         <p style={{ ...styles.helper, color: "#334155", fontWeight: 600 }}>
-          This page is currently reading from localStorage. In the backend phase,
-          these records should be protected from management deletion or silent
-          editing.
+          Audit records are read from the institution&apos;s shared database trail.
+          The Command Centre client can append records but cannot silently edit
+          or delete them.
         </p>
 
         {filteredLogs.length === 0 ? (
           <p style={styles.empty}>
-            No audit records found yet. Click “Add Sample Audit Logs” to preview
-            the structure.
+            No audit records match the selected filters.
           </p>
         ) : (
           <div style={styles.tableWrap}>
@@ -342,6 +358,13 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "13px 20px",
     fontWeight: 800,
     cursor: "pointer",
+  },
+
+  syncMessage: {
+    marginTop: "14px",
+    color: "#cbd5e1",
+    fontSize: "13px",
+    lineHeight: 1.5,
   },
 
   metricsGrid: {

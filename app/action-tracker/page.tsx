@@ -224,6 +224,12 @@ function createActions(records: LoanRecord[]): ActionItem[] {
     }));
 }
 
+function hasUsableActions(value: unknown): value is Array<Partial<ActionItem> & { loan_account: string; member_name: string }> {
+  return Array.isArray(value) && value.some(
+    (action) => action && typeof action === "object" && "loan_account" in action
+  );
+}
+
 function getCurrentRole(): string {
   return localStorage.getItem("kiprodCurrentRole") || "MVP User";
 }
@@ -281,7 +287,7 @@ export default function ActionTrackerPage() {
         Partial<ActionItem> & { loan_account: string; member_name: string }
       >;
       const nextActions =
-        parsedActions.length > 0
+        hasUsableActions(parsedActions)
           ? parsedActions.map(normalizeAction)
           : createActions(parsedRecords);
       queueMicrotask(() => {
@@ -289,7 +295,7 @@ export default function ActionTrackerPage() {
         setRecords(parsedRecords);
         setActions(nextActions);
       });
-      if (parsedRecords.length > 0 && parsedActions.length === 0) {
+      if (parsedRecords.length > 0 && !hasUsableActions(parsedActions)) {
         localStorage.setItem("kiprod_action_items", JSON.stringify(nextActions));
       }
     } catch {
@@ -564,6 +570,21 @@ export default function ActionTrackerPage() {
                     </tr>
                   </thead>
                   <tbody>
+                    {paginatedActions.length === 0 && (
+                      <tr>
+                        <td colSpan={13} className="px-6 py-12 text-center">
+                          <p className="font-bold text-slate-950">No actions match the current view.</p>
+                          <p className="mt-2 text-sm font-medium text-slate-700">Clear the search or select All Actions and All Officers.</p>
+                          <button
+                            type="button"
+                            onClick={() => { setActiveFilter("All Actions"); setOfficerFilter("All Officers"); setSearchQuery(""); }}
+                            className="mt-4 rounded-full bg-slate-950 px-5 py-2 text-sm font-semibold text-white"
+                          >
+                            Show all generated actions
+                          </button>
+                        </td>
+                      </tr>
+                    )}
                     {paginatedActions.map((action) => {
                       const overdue = isOverdue(action);
                       const boardVisible = isBoardVisible(
