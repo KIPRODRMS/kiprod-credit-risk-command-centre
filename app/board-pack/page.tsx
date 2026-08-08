@@ -832,14 +832,27 @@ export default function BoardPackPage() {
               watchlist and management-action data.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={printReport}
-            className="board-report-print-button inline-flex items-center justify-center rounded-lg border border-[#071426] bg-[#071426] px-5 py-3 text-sm font-black text-white shadow-md transition-colors hover:bg-[#102b48] print:hidden"
-            style={{ backgroundColor: "#071426", color: "#ffffff" }}
-          >
-            Print Report
-          </button>
+          <div className="flex w-full flex-wrap gap-3 print:hidden sm:w-auto md:justify-end">
+            <button
+              type="button"
+              onClick={printReport}
+              className="board-report-print-button inline-flex min-h-12 min-w-40 shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-[#071426] bg-[#071426] px-5 py-3 text-sm font-black text-white shadow-md transition-colors hover:bg-[#102b48]"
+              style={{ backgroundColor: "#071426", color: "#ffffff" }}
+            >
+              Print Report
+            </button>
+            <button
+              type="button"
+              onClick={downloadBoardPackPdf}
+              disabled={isDownloading}
+              className="inline-flex min-h-12 min-w-44 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full border-2 border-[#b78322] bg-[#d6a84f] px-5 py-3 text-sm font-black text-[#071426] shadow-md transition-colors hover:bg-[#e1b85f] disabled:cursor-wait disabled:opacity-70"
+              style={{ backgroundColor: "#d6a84f", color: "#071426" }}
+              aria-label="Download Board Credit Risk Pack as PDF"
+            >
+              <span aria-hidden="true">↓</span>
+              {isDownloading ? "Preparing PDF..." : "Download PDF"}
+            </button>
+          </div>
         </header>
 
         {records.length === 0 ? (
@@ -1213,27 +1226,46 @@ export default function BoardPackPage() {
               </div>
             </section>
 
-            <div className="flex flex-wrap gap-3 print:hidden">
+            <div className="flex flex-wrap items-center gap-3 print:hidden">
               <Link
                 href="/executive-dashboard"
-                className="inline-flex min-h-12 items-center justify-center rounded-full border border-[#071426] bg-[#071426] px-6 py-3 font-black text-white shadow-md transition-colors hover:bg-[#102b48]"
+                className="inline-flex min-h-12 min-w-48 shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-[#071426] bg-[#071426] px-6 py-3 font-black text-white shadow-md transition-colors hover:bg-[#102b48]"
                 style={{ backgroundColor: "#071426", color: "#ffffff" }}
               >
                 Executive Cockpit
               </Link>
               <Link
                 href="/action-tracker"
-                className="inline-flex min-h-12 items-center justify-center rounded-full border border-[#b78322] bg-[#d6a84f] px-6 py-3 font-black text-[#071426] shadow-md transition-colors hover:bg-[#e1b85f]"
+                className="inline-flex min-h-12 min-w-48 shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-[#b78322] bg-[#d6a84f] px-6 py-3 font-black text-[#071426] shadow-md transition-colors hover:bg-[#e1b85f]"
                 style={{ backgroundColor: "#d6a84f", color: "#071426" }}
               >
                 Execution Tracker
               </Link>
               <Link
                 href="/board-oversight"
-                className="rounded-full border border-slate-950 bg-slate-950 px-5 py-3 font-semibold text-white shadow-sm transition-colors hover:bg-slate-800"
+                className="inline-flex min-h-12 min-w-44 shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-slate-950 bg-slate-950 px-5 py-3 font-black text-white shadow-md transition-colors hover:bg-slate-800"
               >
                 Board Oversight
               </Link>
+              <button
+                type="button"
+                onClick={printReport}
+                className="inline-flex min-h-12 min-w-40 shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-[#071426] bg-[#071426] px-5 py-3 text-sm font-black text-white shadow-md transition-colors hover:bg-[#102b48]"
+                style={{ backgroundColor: "#071426", color: "#ffffff" }}
+              >
+                Print Report
+              </button>
+              <button
+                type="button"
+                onClick={downloadBoardPackPdf}
+                disabled={isDownloading}
+                className="inline-flex min-h-12 min-w-44 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full border-2 border-[#b78322] bg-[#d6a84f] px-5 py-3 text-sm font-black text-[#071426] shadow-md transition-colors hover:bg-[#e1b85f] disabled:cursor-wait disabled:opacity-70"
+                style={{ backgroundColor: "#d6a84f", color: "#071426" }}
+                aria-label="Download Board Credit Risk Pack as PDF"
+              >
+                <span aria-hidden="true">↓</span>
+                {isDownloading ? "Preparing PDF..." : "Download PDF"}
+              </button>
             </div>
             <footer className="board-report-footer">
               <span>KIPROD Risk Management Services</span>
@@ -1243,19 +1275,6 @@ export default function BoardPackPage() {
         )}
         </div>
       </section>
-      {records.length > 0 && (
-        <button
-          type="button"
-          onClick={downloadBoardPackPdf}
-          disabled={isDownloading}
-          className="board-report-download-fab fixed bottom-4 right-4 z-40 inline-flex min-h-12 items-center justify-center gap-2 rounded-full border-2 border-[#b78322] bg-[#d6a84f] px-5 py-3 text-sm font-black text-[#071426] shadow-xl print:hidden disabled:cursor-wait disabled:opacity-70"
-          style={{ backgroundColor: "#d6a84f", color: "#071426" }}
-          aria-label="Download Board Credit Risk Pack as PDF"
-        >
-          <span aria-hidden="true">↓</span>
-          {isDownloading ? "Preparing PDF..." : "Download PDF"}
-        </button>
-      )}
     </main>
   );
 }
