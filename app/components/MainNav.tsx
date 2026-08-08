@@ -9,6 +9,7 @@ import {
   INSTITUTION_PROFILE_UPDATED_EVENT,
   loadMasterInstitutionProfile,
   type InstitutionProfile,
+  type MasterProfileSource,
 } from "@/lib/institutionMaster";
 
 const navItems = [
@@ -31,12 +32,16 @@ export default function MainNav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [profile, setProfile] = useState<InstitutionProfile>(defaultInstitutionProfile);
+  const [profileSource, setProfileSource] = useState<MasterProfileSource | "loading">("loading");
 
   useEffect(() => {
     let active = true;
     const refreshProfile = () => {
       loadMasterInstitutionProfile().then((result) => {
-        if (active) setProfile(result.profile);
+        if (active) {
+          setProfile(result.profile);
+          setProfileSource(result.source);
+        }
       });
     };
     const receiveProfile = (event: Event) => {
@@ -69,82 +74,110 @@ export default function MainNav() {
     };
   }, [open]);
 
+  const institutionName = profile.institutionName || "Institution Profile pending";
+  const institutionInitial = profile.institutionName.trim().charAt(0).toUpperCase() || "K";
+  const activePage = navItems.find((item) => item.href === pathname)?.label || "Command Centre";
+  const profileStatus =
+    profileSource === "supabase"
+      ? "Master record synced"
+      : profileSource === "loading"
+        ? "Checking master record"
+        : profileSource === "local"
+          ? "Local record active"
+          : "Profile setup required";
+
   return (
-    <header className="command-header sticky top-0 z-50 border-b border-[#c89b3c]/20 bg-[#071426] text-white shadow-lg shadow-slate-950/15">
-      <div className="mx-auto max-w-[1800px] px-4 sm:px-6">
-        <div className="flex min-h-16 items-center justify-between gap-3 py-2 md:min-h-20">
+    <header className="command-header sticky top-0 z-50 text-white">
+      <div className="command-header-grid" aria-hidden="true" />
+      <div className="command-header-glow" aria-hidden="true" />
+
+      <div className="command-header-shell">
+        <div className="command-header-row">
           <Link
             href="/"
-            className="group flex min-w-0 items-center gap-2.5 sm:gap-3"
+            className="command-brand group"
             aria-label="KIPROD Credit Risk Command Centre home"
           >
-            <Image
-              src="/icon-192.png"
-              alt=""
-              width={44}
-              height={44}
-              priority
-              className="h-10 w-10 shrink-0 rounded-xl border border-[#d6a84f]/35 shadow-lg shadow-black/30 transition group-hover:scale-[1.03] sm:h-11 sm:w-11"
-            />
-            <span className="min-w-0 leading-tight">
-              <span className="block text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#e1b85f] sm:text-xs">
-                KIPROD
+            <span className="command-brand-mark">
+              <Image
+                src="/icon-192.png"
+                alt=""
+                width={48}
+                height={48}
+                priority
+              />
+              <i aria-hidden="true" />
+            </span>
+            <span className="command-brand-copy">
+              <span className="command-brand-kicker">KIPROD</span>
+              <span className="command-brand-title">
+                Risk Command Centre
               </span>
-              <span className="block truncate text-xs font-black tracking-wide text-white sm:text-sm">
-                Executive Risk Intelligence
-              </span>
+              <span className="command-brand-subtitle">Executive intelligence system</span>
             </span>
           </Link>
 
-          <div className="hidden min-w-0 flex-1 items-center justify-center sm:flex 2xl:justify-start">
-            <div className="max-w-md truncate rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-slate-200">
-              <strong className="text-white">
-                {profile.institutionName || "Institution Profile pending"}
-              </strong>
-              <span className="mx-2 text-[#d6a84f]">•</span>
-              <span>{profile.reportingMonth || "Reporting month pending"}</span>
-              <span className="mx-2 text-[#d6a84f]">•</span>
-              <span>{profile.reportingCurrency || "KES"}</span>
-            </div>
+          <Link
+            href="/institution-profile"
+            className="command-institution-panel group"
+            aria-label={`Open master Institution Profile for ${institutionName}`}
+          >
+            <span className="command-institution-emblem" aria-hidden="true">
+              <b>{institutionInitial}</b>
+              <i />
+            </span>
+
+            <span className="command-institution-copy">
+              <span className="command-context-kicker">
+                <i aria-hidden="true" /> Active institutional command
+              </span>
+              <strong>{institutionName}</strong>
+              <span className="command-context-meta">
+                <span>
+                  <svg viewBox="0 0 20 20" aria-hidden="true">
+                    <path d="M4 3.5h12v13H4zM7 2v3M13 2v3M4 7h12" />
+                  </svg>
+                  {profile.reportingMonth || "Reporting period pending"}
+                </span>
+                <span className="command-context-type">{profile.institutionType || "Institution"}</span>
+                <span className="command-context-currency">{profile.reportingCurrency || "KES"}</span>
+              </span>
+            </span>
+
+            <span className={`command-profile-state is-${profileSource}`}>
+              <i aria-hidden="true" />
+              <span>{profileStatus}</span>
+              <svg viewBox="0 0 20 20" aria-hidden="true">
+                <path d="m7 4 6 6-6 6" />
+              </svg>
+            </span>
+          </Link>
+
+          <div className="command-current-view" aria-label={`Current view: ${activePage}`}>
+            <span>Current view</span>
+            <strong>{activePage}</strong>
           </div>
 
           <button
             type="button"
-            className="menu-trigger inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#d6a84f]/30 bg-white/5 text-white transition hover:border-[#d6a84f]/60 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-[#d6a84f] 2xl:hidden"
+            className="menu-trigger command-menu-trigger"
             aria-label={open ? "Close navigation menu" : "Open navigation menu"}
             aria-expanded={open}
             aria-controls="mobile-navigation"
             onClick={() => setOpen((value) => !value)}
           >
             <span className="sr-only">{open ? "Close menu" : "Open menu"}</span>
-            <span className="relative block h-5 w-6" aria-hidden="true">
-              <span className={`absolute left-0 top-0.5 h-0.5 w-6 rounded bg-current transition ${open ? "translate-y-2 rotate-45" : ""}`} />
-              <span className={`absolute left-0 top-2.5 h-0.5 w-6 rounded bg-current transition ${open ? "opacity-0" : ""}`} />
-              <span className={`absolute left-0 top-[18px] h-0.5 w-6 rounded bg-current transition ${open ? "-translate-y-2 -rotate-45" : ""}`} />
+            <span className="command-menu-copy" aria-hidden="true">
+              <small>Navigate</small>
+              <b>{open ? "Close" : "Menu"}</b>
+            </span>
+            <span className="command-menu-icon" aria-hidden="true">
+              <span className={open ? "is-open" : ""} />
+              <span className={open ? "is-open" : ""} />
+              <span className={open ? "is-open" : ""} />
             </span>
           </button>
-
-          <nav className="hidden max-w-[1120px] flex-wrap justify-end gap-1.5 2xl:flex" aria-label="Primary navigation">
-            {navItems.map((item) => {
-              const active = pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  aria-current={active ? "page" : undefined}
-                  className={`rounded-full px-3 py-2 text-xs font-semibold transition xl:text-sm ${
-                    active
-                      ? "bg-[#d6a84f] text-[#071426] shadow-sm shadow-black/20"
-                      : "bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
         </div>
-
       </div>
 
       <button
@@ -152,7 +185,7 @@ export default function MainNav() {
         aria-label="Close navigation menu"
         tabIndex={open ? 0 : -1}
         onClick={() => setOpen(false)}
-        className={`nav-backdrop fixed inset-0 z-[60] bg-[#030a14]/65 backdrop-blur-md transition-all 2xl:hidden ${
+        className={`nav-backdrop fixed inset-0 z-[60] bg-[#030a14]/65 backdrop-blur-md transition-all ${
           open ? "visible opacity-100" : "invisible opacity-0"
         }`}
       />
@@ -161,7 +194,7 @@ export default function MainNav() {
         id="mobile-navigation"
         aria-label="Command Centre navigation"
         aria-hidden={!open}
-        className={`nav-drawer fixed inset-y-0 right-0 z-[70] flex w-[min(88vw,420px)] flex-col border-l border-[#d6a84f]/25 bg-[#071426] shadow-2xl shadow-black/50 transition-transform 2xl:hidden ${
+        className={`nav-drawer fixed inset-y-0 right-0 z-[70] flex w-[min(90vw,440px)] flex-col border-l border-[#d6a84f]/25 bg-[#071426] shadow-2xl shadow-black/50 transition-transform ${
           open ? "translate-x-0" : "translate-x-full"
         }`}
       >
@@ -180,16 +213,18 @@ export default function MainNav() {
           </button>
         </div>
 
-        <div className="border-b border-slate-800 bg-white/[0.035] px-5 py-3 text-xs leading-5 text-slate-300">
-          <p className="font-black text-white">
-            {profile.institutionName || "Institution Profile pending"}
-          </p>
-          <p>
-            {profile.reportingMonth || "Reporting month pending"} · {profile.reportingCurrency || "KES"}
-          </p>
+        <div className="command-drawer-context">
+          <div className="command-drawer-emblem">{institutionInitial}</div>
+          <div>
+            <span>Active institution</span>
+            <p>{institutionName}</p>
+            <small>
+              {profile.reportingMonth || "Reporting month pending"} · {profile.reportingCurrency || "KES"}
+            </small>
+          </div>
         </div>
 
-        <nav className="grid flex-1 grid-cols-1 gap-2 overflow-y-auto p-4 sm:grid-cols-2 lg:grid-cols-1" aria-label="Menu links">
+        <nav className="grid flex-1 grid-cols-1 gap-2 overflow-y-auto p-4" aria-label="Menu links">
           {navItems.map((item, index) => {
             const active = pathname === item.href;
             return (

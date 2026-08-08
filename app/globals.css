@@ -55,6 +55,597 @@ button {
   color: var(--kiprod-navy);
 }
 
+/* Executive institutional masthead ------------------------------------ */
+.command-header {
+  isolation: isolate;
+  min-height: 88px;
+  overflow: clip;
+  border-bottom: 1px solid rgb(214 168 79 / 0.42);
+  background:
+    radial-gradient(circle at 50% -120%, rgb(214 168 79 / 0.22), transparent 48%),
+    linear-gradient(112deg, #06111f 0%, #081a2e 48%, #071426 100%);
+  box-shadow: 0 14px 35px rgb(7 20 38 / 0.18);
+}
+
+.command-header::before {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 2;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 4%, #9e742d 22%, #e1b85f 50%, #9e742d 78%, transparent 96%);
+  opacity: 0.92;
+}
+
+.command-header-grid,
+.command-header-glow {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.command-header-grid {
+  opacity: 0.12;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.09) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.09) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(90deg, transparent, #000 28%, #000 72%, transparent);
+}
+
+.command-header-glow {
+  left: 28%;
+  right: 28%;
+  opacity: 0.85;
+  background: radial-gradient(ellipse at 50% 120%, rgb(214 168 79 / 0.16), transparent 65%);
+}
+
+.command-header-shell {
+  position: relative;
+  z-index: 1;
+  width: min(1800px, 100%);
+  margin: 0 auto;
+  padding-inline: clamp(1rem, 2.4vw, 2rem);
+}
+
+.command-header-row {
+  display: grid;
+  grid-template-columns: minmax(232px, 0.78fr) minmax(420px, 1.45fr) minmax(130px, 0.48fr) auto;
+  align-items: center;
+  gap: clamp(0.85rem, 1.6vw, 1.6rem);
+  min-height: 88px;
+}
+
+.command-brand {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.85rem;
+  color: #fff;
+  text-decoration: none;
+}
+
+.command-brand-mark {
+  position: relative;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  place-items: center;
+  border: 1px solid rgb(225 184 95 / 0.45);
+  border-radius: 13px;
+  background: linear-gradient(145deg, rgb(255 255 255 / 0.1), rgb(255 255 255 / 0.025));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12), 0 12px 26px rgb(0 0 0 / 0.26);
+}
+
+.command-brand-mark img {
+  width: 40px;
+  height: 40px;
+  border-radius: 9px;
+}
+
+.command-brand-mark i {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #071426;
+  border-radius: 50%;
+  background: #d6a84f;
+  box-shadow: 0 0 13px rgb(225 184 95 / 0.8);
+}
+
+.command-brand-copy,
+.command-institution-copy {
+  display: block;
+  min-width: 0;
+}
+
+.command-brand-kicker,
+.command-context-kicker,
+.command-current-view > span {
+  display: block;
+  color: #d9ae59;
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.command-brand-title {
+  display: block;
+  margin-top: 0.18rem;
+  overflow: hidden;
+  color: #fff;
+  font-size: 0.92rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-brand-subtitle {
+  display: block;
+  margin-top: 0.22rem;
+  overflow: hidden;
+  color: #7f93a8;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.command-institution-panel {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.85rem;
+  min-width: 0;
+  min-height: 62px;
+  padding: 0.65rem 0.8rem;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 16px;
+  background: linear-gradient(105deg, rgb(255 255 255 / 0.075), rgb(255 255 255 / 0.025));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 12px 30px rgb(0 0 0 / 0.14);
+  color: #fff;
+  text-decoration: none;
+  backdrop-filter: blur(16px);
+}
+
+.command-institution-panel::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: linear-gradient(#f0cf89, #b47d22);
+  box-shadow: 0 0 18px rgb(214 168 79 / 0.65);
+}
+
+.command-institution-emblem {
+  position: relative;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid rgb(225 184 95 / 0.42);
+  border-radius: 11px;
+  background: linear-gradient(145deg, #173551, #0b2035);
+  color: #e7c579;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.09);
+}
+
+.command-institution-emblem b {
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.command-institution-emblem i {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #d6a84f;
+}
+
+.command-context-kicker {
+  display: flex;
+  align-items: center;
+  gap: 0.42rem;
+  color: #98aabc;
+  font-size: 0.52rem;
+  letter-spacing: 0.14em;
+}
+
+.command-context-kicker i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #45b983;
+  box-shadow: 0 0 0 4px rgb(69 185 131 / 0.1), 0 0 10px rgb(69 185 131 / 0.55);
+}
+
+.command-institution-copy > strong {
+  display: block;
+  margin-top: 0.2rem;
+  overflow: hidden;
+  color: #f8fafc;
+  font-size: clamp(0.8rem, 1vw, 0.95rem);
+  font-weight: 850;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-context-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.42rem;
+  margin-top: 0.28rem;
+  overflow: hidden;
+  color: #aebdca;
+  font-size: 0.57rem;
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.command-context-meta > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.command-context-meta > span + span::before {
+  content: "";
+  width: 2px;
+  height: 2px;
+  margin-right: 0.12rem;
+  border-radius: 50%;
+  background: #d6a84f;
+}
+
+.command-context-meta svg {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 11px;
+  fill: none;
+  stroke: #d6a84f;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.35;
+}
+
+.command-profile-state {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem;
+  max-width: 120px;
+  padding-left: 0.7rem;
+  border-left: 1px solid rgb(255 255 255 / 0.09);
+  color: #8fa2b4;
+  font-size: 0.5rem;
+  font-weight: 800;
+  letter-spacing: 0.045em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.command-profile-state > i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #d6a84f;
+  box-shadow: 0 0 9px rgb(214 168 79 / 0.55);
+}
+
+.command-profile-state.is-supabase > i {
+  background: #45b983;
+  box-shadow: 0 0 9px rgb(69 185 131 / 0.7);
+}
+
+.command-profile-state svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: #d6a84f;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  transition: transform 180ms var(--motion-ease, ease);
+}
+
+.command-institution-panel:hover {
+  border-color: rgb(225 184 95 / 0.34);
+  background: linear-gradient(105deg, rgb(255 255 255 / 0.1), rgb(255 255 255 / 0.035));
+}
+
+.command-institution-panel:hover .command-profile-state svg {
+  transform: translateX(3px);
+}
+
+.command-current-view {
+  min-width: 0;
+  padding-left: clamp(0.7rem, 1.2vw, 1.2rem);
+  border-left: 1px solid rgb(255 255 255 / 0.1);
+}
+
+.command-current-view > span {
+  color: #6f8498;
+  font-size: 0.5rem;
+}
+
+.command-current-view > strong {
+  display: block;
+  margin-top: 0.28rem;
+  overflow: hidden;
+  color: #dbe3ea;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-menu-trigger {
+  display: inline-flex;
+  min-width: 112px;
+  height: 50px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding: 0 0.85rem 0 1rem;
+  border: 1px solid rgb(225 184 95 / 0.38);
+  border-radius: 13px;
+  background: linear-gradient(145deg, rgb(214 168 79 / 0.12), rgb(255 255 255 / 0.035));
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
+}
+
+.command-menu-trigger:hover {
+  border-color: rgb(225 184 95 / 0.72);
+  background: linear-gradient(145deg, rgb(214 168 79 / 0.2), rgb(255 255 255 / 0.06));
+  box-shadow: 0 10px 24px rgb(0 0 0 / 0.18), inset 0 1px 0 rgb(255 255 255 / 0.1);
+}
+
+.command-menu-trigger:focus-visible {
+  outline: 2px solid #e1b85f;
+  outline-offset: 3px;
+}
+
+.command-menu-copy {
+  display: block;
+  text-align: left;
+}
+
+.command-menu-copy small {
+  display: block;
+  color: #8295a8;
+  font-size: 0.48rem;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.command-menu-copy b {
+  display: block;
+  margin-top: 0.3rem;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.command-menu-icon {
+  position: relative;
+  display: block;
+  width: 24px;
+  height: 18px;
+}
+
+.command-menu-icon span {
+  position: absolute;
+  right: 0;
+  display: block;
+  height: 1.5px;
+  border-radius: 99px;
+  background: #e1b85f;
+  transition: transform 220ms ease, opacity 180ms ease, width 180ms ease;
+}
+
+.command-menu-icon span:nth-child(1) { top: 1px; width: 24px; }
+.command-menu-icon span:nth-child(2) { top: 8px; width: 17px; }
+.command-menu-icon span:nth-child(3) { top: 15px; width: 21px; }
+.command-menu-icon span:nth-child(1).is-open { top: 8px; width: 22px; transform: rotate(45deg); }
+.command-menu-icon span:nth-child(2).is-open { opacity: 0; }
+.command-menu-icon span:nth-child(3).is-open { top: 8px; width: 22px; transform: rotate(-45deg); }
+
+.command-drawer-context {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.8rem;
+  border-bottom: 1px solid #1e3044;
+  background: linear-gradient(105deg, rgb(214 168 79 / 0.11), rgb(255 255 255 / 0.025));
+  padding: 0.9rem 1.25rem;
+}
+
+.command-drawer-emblem {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid rgb(225 184 95 / 0.4);
+  border-radius: 10px;
+  background: #102b48;
+  color: #e1b85f;
+  font-size: 0.9rem;
+  font-weight: 900;
+}
+
+.command-drawer-context span {
+  display: block;
+  color: #d6a84f;
+  font-size: 0.49rem;
+  font-weight: 900;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.command-drawer-context p {
+  margin: 0.18rem 0 0;
+  overflow: hidden;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-drawer-context small {
+  display: block;
+  margin-top: 0.15rem;
+  color: #8ea1b3;
+  font-size: 0.58rem;
+}
+
+@media (max-width: 1180px) {
+  .command-header-row {
+    grid-template-columns: minmax(218px, 0.72fr) minmax(360px, 1.28fr) auto;
+  }
+
+  .command-current-view {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .command-header {
+    min-height: 126px;
+  }
+
+  .command-header-grid {
+    background-size: 40px 40px;
+  }
+
+  .command-header-shell {
+    padding-inline: 0;
+  }
+
+  .command-header-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0;
+    min-height: 126px;
+  }
+
+  .command-brand {
+    min-height: 66px;
+    padding: 0.55rem 1rem;
+  }
+
+  .command-brand-mark {
+    width: 42px;
+    height: 42px;
+    flex-basis: 42px;
+    border-radius: 12px;
+  }
+
+  .command-brand-mark img {
+    width: 35px;
+    height: 35px;
+  }
+
+  .command-brand-subtitle {
+    display: none;
+  }
+
+  .command-menu-trigger {
+    min-width: 50px;
+    width: 50px;
+    height: 46px;
+    margin-right: 1rem;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .command-menu-copy {
+    display: none;
+  }
+
+  .command-institution-panel {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    min-height: 60px;
+    margin: 0;
+    padding: 0.58rem 1rem;
+    border-width: 1px 0 0;
+    border-color: rgb(255 255 255 / 0.08);
+    border-radius: 0;
+    background: rgb(2 12 23 / 0.28);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.025);
+    backdrop-filter: none;
+  }
+
+  .command-institution-panel::after {
+    top: 11px;
+    bottom: 11px;
+    left: 0;
+  }
+
+  .command-institution-emblem {
+    width: 34px;
+    height: 34px;
+  }
+
+  .command-profile-state {
+    max-width: none;
+    padding-left: 0.55rem;
+  }
+
+  .command-profile-state > span {
+    display: none;
+  }
+}
+
+@media (max-width: 430px) {
+  .command-brand-title {
+    font-size: 0.78rem;
+  }
+
+  .command-brand-kicker {
+    font-size: 0.52rem;
+  }
+
+  .command-context-type {
+    display: none !important;
+  }
+
+  .command-context-meta {
+    max-width: calc(100vw - 118px);
+  }
+
+  .command-institution-copy > strong {
+    font-size: 0.76rem;
+  }
+}
+
 /* KIPROD institutional UI alignment. Existing page structure and risk logic
    stay intact; this layer gives shared surfaces one calm visual language. */
 .motion-page > main:not(.board-report) {
