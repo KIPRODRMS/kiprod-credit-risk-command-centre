@@ -2407,3 +2407,76 @@ main .grid > [class~="bg-white"] > .text-red-800 {
   -webkit-text-fill-color: #000000 !important;
   opacity: 1 !important;
 }
+
+/* Audit History contrast lock ------------------------------------------------
+   Audit rows sit on white surfaces inside a dark page. These scoped rules keep
+   the register's explanatory copy institutional blue instead of inheriting the
+   light-grey foreground used by the surrounding executive surface. */
+.motion-page.route-audit-history main .audit-history-register {
+  --audit-ink: #0b2a55;
+  --audit-copy: #173a5e;
+  --audit-copy-secondary: #294968;
+}
+
+.motion-page.route-audit-history main .audit-history-register :is(td, p, span, summary) {
+  color: var(--audit-copy) !important;
+  -webkit-text-fill-color: var(--audit-copy);
+}
+
+.motion-page.route-audit-history main .audit-history-register .audit-history-headline,
+.motion-page.route-audit-history main .audit-history-register .audit-history-field-label,
+.motion-page.route-audit-history main .audit-history-register td strong {
+  color: var(--audit-ink) !important;
+  -webkit-text-fill-color: var(--audit-ink);
+}
+
+.motion-page.route-audit-history main .audit-history-register :is(
+  .audit-history-old-value,
+  .audit-history-more
+) {
+  color: var(--audit-copy-secondary) !important;
+  -webkit-text-fill-color: var(--audit-copy-secondary);
+}
+
+.motion-page.route-audit-history main .audit-history-register .audit-history-arrow {
+  color: #8a5b12 !important;
+  -webkit-text-fill-color: #8a5b12;
+}
+
+.motion-page.route-audit-history main .audit-history-register .audit-history-new-value {
+  color: #0f5132 !important;
+  -webkit-text-fill-color: #0f5132;
+}
+
+.motion-page.route-audit-history main .audit-history-register .audit-history-technical-summary {
+  color: #6f4607 !important;
+  -webkit-text-fill-color: #6f4607;
+}
+
+.motion-page.route-audit-history main .audit-history-register .audit-history-technical-label {
+  color: #e3bb69 !important;
+  -webkit-text-fill-color: #e3bb69;
+}
+
+.motion-page.route-audit-history main .audit-history-register .audit-history-technical-value {
+  color: #eef4fa !important;
+  -webkit-text-fill-color: #eef4fa;
+}
+
+.motion-page.route-audit-history main .audit-history-register nav :is(p, span) {
+  color: var(--audit-ink) !important;
+  -webkit-text-fill-color: var(--audit-ink);
+}
+
+.motion-page.route-audit-history main .audit-history-register nav button:disabled {
+  border-color: #aebccc !important;
+  background: #e3e9ef !important;
+  color: var(--audit-copy-secondary) !important;
+  -webkit-text-fill-color: var(--audit-copy-secondary);
+  opacity: 1 !important;
+}
+
+.motion-page.route-audit-history main input::placeholder {
+  color: #294968 !important;
+  -webkit-text-fill-color: #294968;
+}

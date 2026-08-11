@@ -22,6 +22,32 @@ type AuditLog = {
   note: string;
 };
 
+type AuditChange = {
+  label: string;
+  oldValue: string;
+  newValue: string;
+};
+
+type AuditChangeSummary = {
+  headline: string;
+  changes: AuditChange[];
+};
+
+const FIELD_LABELS: Record<string, string> = {
+  institutionName: "Institution name",
+  institutionType: "Institution type",
+  reportingMonth: "Reporting month",
+  reportingCurrency: "Reporting currency",
+  riskLead: "Risk lead",
+  creditManager: "Credit manager",
+  recoveryLead: "Recovery lead",
+  boardChair: "Board Chair / Risk Lead",
+  countyRegion: "County / region",
+  primaryContact: "Primary contact",
+  boardReportingFrequency: "Board reporting frequency",
+  governanceMode: "Governance mode",
+};
+
 function readAuditLogs(): AuditLog[] {
   const raw = localStorage.getItem("kiprodAuditLogs");
 
@@ -43,6 +69,124 @@ function formatDate(value: string): string {
   return date.toLocaleString();
 }
 
+function parseAuditObject(value: string): Record<string, unknown> | null {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{")) return null;
+
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function formatAuditValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "Not set";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function titleCase(value: string): string {
+  return value
+    .replace(/_/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function actionLabel(actionType: string): string {
+  return titleCase(actionType || "Audit event");
+}
+
+function changeSubject(log: AuditLog): string {
+  const executionField = log.actionType.match(/^EXECUTION_(.+)_UPDATED$/)?.[1];
+  if (executionField) return titleCase(executionField);
+  if (log.module === "Clarification Requests") return "Clarification status";
+  if (log.module === "Board Report") return "Board Report value";
+  if (log.module === "Board Oversight") return "Board review outcome";
+  if (log.module === "Portfolio Upload") return "Portfolio record";
+  return "Recorded value";
+}
+
+function buildChangeSummary(log: AuditLog): AuditChangeSummary {
+  const oldObject = parseAuditObject(log.oldValue);
+  const newObject = parseAuditObject(log.newValue);
+
+  if (newObject) {
+    const keys = Array.from(
+      new Set([...Object.keys(oldObject || {}), ...Object.keys(newObject)])
+    );
+    const changes = keys
+      .filter((key) => {
+        if (!oldObject) return formatAuditValue(newObject[key]) !== "Not set";
+        return JSON.stringify(oldObject[key]) !== JSON.stringify(newObject[key]);
+      })
+      .map((key) => ({
+        label: FIELD_LABELS[key] || titleCase(key),
+        oldValue: oldObject ? formatAuditValue(oldObject[key]) : "Not previously recorded",
+        newValue: formatAuditValue(newObject[key]),
+      }));
+
+    if (!oldObject) {
+      return {
+        headline: `Master Institution Profile created with ${changes.length} populated ${
+          changes.length === 1 ? "field" : "fields"
+        }.`,
+        changes,
+      };
+    }
+
+    return {
+      headline:
+        changes.length > 0
+          ? `${changes.length} Institution Profile ${
+              changes.length === 1 ? "field was" : "fields were"
+            } updated.`
+          : "Institution Profile saved with no master-field changes.",
+      changes,
+    };
+  }
+
+  const oldValue = formatAuditValue(log.oldValue);
+  const newValue = formatAuditValue(log.newValue);
+
+  if (log.actionType === "PORTFOLIO_UPLOADED") {
+    return {
+      headline: `Portfolio upload completed: ${newValue}.`,
+      changes: [{ label: "Portfolio state", oldValue, newValue }],
+    };
+  }
+
+  if (oldValue === "Not set") {
+    return {
+      headline: `${actionLabel(log.actionType)} recorded as ${newValue}.`,
+      changes: [],
+    };
+  }
+
+  if (oldValue === newValue) {
+    return {
+      headline: `${actionLabel(log.actionType)} recorded with no value change.`,
+      changes: [],
+    };
+  }
+
+  const subject = changeSubject(log);
+  return {
+    headline: `${subject} changed from ${oldValue} to ${newValue}.`,
+    changes: [{ label: subject, oldValue, newValue }],
+  };
+}
+
+function technicalValue(value: string): string {
+  const objectValue = parseAuditObject(value);
+  return objectValue ? JSON.stringify(objectValue, null, 2) : formatAuditValue(value);
+}
+
 export default function AuditHistoryPage() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [filterModule, setFilterModule] = useState("All");
@@ -57,6 +201,8 @@ export default function AuditHistoryPage() {
     setLoading(true);
     const institutionId = getInstitutionId();
     const localLogs = readAuditLogs();
+
+    if (localLogs.length > 0) setLogs(localLogs);
 
     if (!institutionId) {
       setLogs(localLogs);
@@ -122,7 +268,8 @@ export default function AuditHistoryPage() {
   }, []);
 
   useEffect(() => {
-    void loadAuditHistory();
+    const timer = window.setTimeout(() => void loadAuditHistory(), 0);
+    return () => window.clearTimeout(timer);
   }, [loadAuditHistory]);
 
   const modules = useMemo(() => {
@@ -151,8 +298,27 @@ export default function AuditHistoryPage() {
     });
   }, [logs, filterModule, filterAction, searchQuery]);
 
-  useEffect(() => setPage(1), [filterModule, filterAction, searchQuery]);
-  const paginatedLogs = filteredLogs.slice((page - 1) * pageSize, page * pageSize);
+  const auditSummary = useMemo(() => {
+    const modulesTracked = new Set(
+      filteredLogs.map((log) => log.module.trim()).filter(Boolean)
+    );
+    const actionTypesTracked = new Set(
+      filteredLogs.map((log) => log.actionType.trim()).filter(Boolean)
+    );
+
+    return {
+      totalRecords: filteredLogs.length,
+      modulesTracked: modulesTracked.size,
+      actionTypesTracked: actionTypesTracked.size,
+    };
+  }, [filteredLogs]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedLogs = filteredLogs.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
 
   return (
     <main style={styles.page}>
@@ -180,16 +346,24 @@ export default function AuditHistoryPage() {
       </section>
 
       <section style={styles.metricsGrid}>
-        <MetricCard label="Total Audit Records" value={logs.length} />
+        <MetricCard
+          label="Total Audit Records"
+          value={loading && logs.length === 0 ? "—" : auditSummary.totalRecords}
+        />
         <MetricCard
           label="Modules Tracked"
-          value={Array.from(new Set(logs.map((log) => log.module))).length}
+          value={loading && logs.length === 0 ? "—" : auditSummary.modulesTracked}
         />
         <MetricCard
           label="Action Types"
-          value={Array.from(new Set(logs.map((log) => log.actionType))).length}
+          value={loading && logs.length === 0 ? "—" : auditSummary.actionTypesTracked}
         />
       </section>
+
+      <p style={styles.metricContext}>
+        Summary counters use the same {filteredLogs.length}-record dataset shown
+        in the register below and update with its filters and search.
+      </p>
 
       <section style={styles.card}>
         <div style={styles.filterRow}>
@@ -198,7 +372,10 @@ export default function AuditHistoryPage() {
             <select
               style={styles.select}
               value={filterModule}
-              onChange={(event) => setFilterModule(event.target.value)}
+              onChange={(event) => {
+                setFilterModule(event.target.value);
+                setPage(1);
+              }}
             >
               {modules.map((module) => (
                 <option key={module}>{module}</option>
@@ -211,7 +388,10 @@ export default function AuditHistoryPage() {
             <select
               style={styles.select}
               value={filterAction}
-              onChange={(event) => setFilterAction(event.target.value)}
+              onChange={(event) => {
+                setFilterAction(event.target.value);
+                setPage(1);
+              }}
             >
               {actionTypes.map((actionType) => (
                 <option key={actionType}>{actionType}</option>
@@ -220,17 +400,26 @@ export default function AuditHistoryPage() {
           </label>
         </div>
         <div style={{ marginTop: 16 }}>
-          <RegisterSearch value={searchQuery} onChange={setSearchQuery} resultCount={filteredLogs.length} placeholder="Search record, module, action, user or note..." />
+          <RegisterSearch
+            value={searchQuery}
+            onChange={(value) => {
+              setSearchQuery(value);
+              setPage(1);
+            }}
+            resultCount={filteredLogs.length}
+            placeholder="Search record, module, action, user or note..."
+          />
         </div>
       </section>
 
       <section style={styles.card}>
         <h2 style={styles.sectionTitle}>Audit Log Records</h2>
 
-        <p style={{ ...styles.helper, color: "#334155", fontWeight: 600 }}>
+        <p style={{ ...styles.helper, color: "#cbd5e1", fontWeight: 600 }}>
           Audit records are read from the institution&apos;s shared database trail.
-          The Command Centre client can append records but cannot silently edit
-          or delete them.
+          Each change is summarized in plain language; expand its technical
+          details to inspect the complete old and new values. The Command Centre
+          client can append records but cannot silently edit or delete them.
         </p>
 
         {filteredLogs.length === 0 ? (
@@ -238,7 +427,7 @@ export default function AuditHistoryPage() {
             No audit records match the selected filters.
           </p>
         ) : (
-          <div style={styles.tableWrap}>
+          <div className="audit-history-register" style={styles.tableWrap}>
             <table style={styles.table}>
               <thead>
                 <tr>
@@ -246,10 +435,8 @@ export default function AuditHistoryPage() {
                   <th style={styles.th}>Module</th>
                   <th style={styles.th}>Action Type</th>
                   <th style={styles.th}>Record</th>
-                  <th style={styles.th}>Old Value</th>
-                  <th style={styles.th}>New Value</th>
-                  <th style={styles.th}>Role</th>
-                  <th style={styles.th}>User</th>
+                  <th style={styles.th}>Change Summary</th>
+                  <th style={styles.th}>Performed By</th>
                   <th style={styles.th}>Note</th>
                 </tr>
               </thead>
@@ -259,18 +446,26 @@ export default function AuditHistoryPage() {
                   <tr key={log.id}>
                     <td style={styles.td}>{formatDate(log.createdAt)}</td>
                     <td style={styles.tdStrong}>{log.module}</td>
-                    <td style={styles.td}>{log.actionType}</td>
+                    <td style={styles.td}>{actionLabel(log.actionType)}</td>
                     <td style={styles.td}>{log.recordRef}</td>
-                    <td style={styles.td}>{log.oldValue}</td>
-                    <td style={styles.td}>{log.newValue}</td>
-                    <td style={styles.td}>{log.role}</td>
-                    <td style={styles.td}>{log.user}</td>
+                    <td style={styles.changeCell}>
+                      <ChangeSummary log={log} />
+                    </td>
+                    <td style={styles.td}>
+                      <strong style={styles.actorName}>{log.user || "MVP User"}</strong>
+                      <span style={styles.actorRole}>{log.role || "Role not recorded"}</span>
+                    </td>
                     <td style={styles.td}>{log.note}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <Pagination page={page} pageSize={pageSize} totalItems={filteredLogs.length} onPageChange={setPage} />
+            <Pagination
+              page={currentPage}
+              pageSize={pageSize}
+              totalItems={filteredLogs.length}
+              onPageChange={setPage}
+            />
           </div>
         )}
       </section>
@@ -290,7 +485,77 @@ export default function AuditHistoryPage() {
   );
 }
 
-function MetricCard({ label, value }: { label: string; value: number }) {
+function ChangeSummary({ log }: { log: AuditLog }) {
+  const summary = buildChangeSummary(log);
+  const visibleChanges = summary.changes.slice(0, 4);
+  const remainingChanges = summary.changes.length - visibleChanges.length;
+
+  return (
+    <div style={styles.changeSummary}>
+      <p className="audit-history-headline" style={styles.changeHeadline}>
+        {summary.headline}
+      </p>
+
+      {visibleChanges.length > 0 ? (
+        <div style={styles.changeList}>
+          {visibleChanges.map((change) => (
+            <div style={styles.changeItem} key={`${change.label}-${change.oldValue}-${change.newValue}`}>
+              <span className="audit-history-field-label" style={styles.changeLabel}>
+                {change.label}
+              </span>
+              <span style={styles.changeValues}>
+                <span className="audit-history-old-value" style={styles.oldValue}>
+                  {change.oldValue}
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="audit-history-arrow"
+                  style={styles.changeArrow}
+                >
+                  →
+                </span>
+                <span className="audit-history-new-value" style={styles.newValue}>
+                  {change.newValue}
+                </span>
+              </span>
+            </div>
+          ))}
+          {remainingChanges > 0 ? (
+            <p className="audit-history-more" style={styles.moreChanges}>
+              +{remainingChanges} more {remainingChanges === 1 ? "field" : "fields"} in the full details
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      <details style={styles.technicalDetails}>
+        <summary className="audit-history-technical-summary" style={styles.technicalSummary}>
+          View full technical details
+        </summary>
+        <div style={styles.technicalGrid}>
+          <div style={styles.technicalPanel}>
+            <p className="audit-history-technical-label" style={styles.technicalLabel}>
+              Old value
+            </p>
+            <pre className="audit-history-technical-value" style={styles.technicalValue}>
+              {technicalValue(log.oldValue)}
+            </pre>
+          </div>
+          <div style={styles.technicalPanel}>
+            <p className="audit-history-technical-label" style={styles.technicalLabel}>
+              New value
+            </p>
+            <pre className="audit-history-technical-value" style={styles.technicalValue}>
+              {technicalValue(log.newValue)}
+            </pre>
+          </div>
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function MetricCard({ label, value }: { label: string; value: number | string }) {
   return (
     <div style={styles.metricCard}>
       <p style={styles.metricLabel}>{label}</p>
@@ -371,7 +636,15 @@ const styles: Record<string, React.CSSProperties> = {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
     gap: "18px",
-    marginBottom: "28px",
+    marginBottom: "10px",
+    maxWidth: "1500px",
+  },
+
+  metricContext: {
+    color: "#94a3b8",
+    fontSize: "13px",
+    lineHeight: 1.5,
+    margin: "0 0 28px",
     maxWidth: "1500px",
   },
 
@@ -463,7 +736,7 @@ const styles: Record<string, React.CSSProperties> = {
 
   table: {
     width: "100%",
-    minWidth: "1450px",
+    minWidth: "1320px",
     borderCollapse: "collapse",
   },
 
@@ -494,5 +767,139 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 800,
     verticalAlign: "top",
     fontSize: "14px",
+  },
+
+  changeCell: {
+    padding: "12px 14px",
+    borderBottom: "1px solid #1d2635",
+    color: "#26364a",
+    verticalAlign: "top",
+    fontSize: "14px",
+    minWidth: "380px",
+    maxWidth: "520px",
+  },
+
+  changeSummary: {
+    display: "grid",
+    gap: "10px",
+  },
+
+  changeHeadline: {
+    color: "#17263a",
+    fontWeight: 800,
+    lineHeight: 1.45,
+    margin: 0,
+  },
+
+  changeList: {
+    display: "grid",
+    gap: "7px",
+  },
+
+  changeItem: {
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    borderRadius: "9px",
+    display: "grid",
+    gap: "4px",
+    padding: "8px 10px",
+  },
+
+  changeLabel: {
+    color: "#475569",
+    fontSize: "11px",
+    fontWeight: 900,
+    letterSpacing: "0.05em",
+    textTransform: "uppercase",
+  },
+
+  changeValues: {
+    alignItems: "center",
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "7px",
+    lineHeight: 1.4,
+  },
+
+  oldValue: {
+    color: "#64748b",
+    textDecoration: "line-through",
+    textDecorationColor: "#cbd5e1",
+  },
+
+  changeArrow: {
+    color: "#b58128",
+    fontWeight: 900,
+  },
+
+  newValue: {
+    color: "#0f5132",
+    fontWeight: 800,
+  },
+
+  moreChanges: {
+    color: "#64748b",
+    fontSize: "12px",
+    fontWeight: 700,
+    margin: 0,
+  },
+
+  technicalDetails: {
+    borderTop: "1px solid #e2e8f0",
+    paddingTop: "8px",
+  },
+
+  technicalSummary: {
+    color: "#8a5b12",
+    cursor: "pointer",
+    fontSize: "12px",
+    fontWeight: 900,
+  },
+
+  technicalGrid: {
+    display: "grid",
+    gap: "8px",
+    marginTop: "9px",
+  },
+
+  technicalPanel: {
+    background: "#0f172a",
+    borderRadius: "8px",
+    minWidth: 0,
+    padding: "9px",
+  },
+
+  technicalLabel: {
+    color: "#d6a84f",
+    fontSize: "10px",
+    fontWeight: 900,
+    letterSpacing: "0.08em",
+    margin: "0 0 5px",
+    textTransform: "uppercase",
+  },
+
+  technicalValue: {
+    color: "#e2e8f0",
+    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+    fontSize: "11px",
+    lineHeight: 1.45,
+    margin: 0,
+    maxHeight: "230px",
+    overflow: "auto",
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+  },
+
+  actorName: {
+    color: "#17263a",
+    display: "block",
+    lineHeight: 1.4,
+  },
+
+  actorRole: {
+    color: "#64748b",
+    display: "block",
+    fontSize: "12px",
+    marginTop: "3px",
   },
 };
