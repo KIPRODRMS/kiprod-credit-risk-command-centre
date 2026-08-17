@@ -86,6 +86,14 @@ function currentRole() {
   return localStorage.getItem("kiprodCurrentRole") || "MVP User";
 }
 
+function cacheClarificationRequests(requests: ClarificationRequest[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(
+    "kiprodClarificationRequests",
+    JSON.stringify(requests)
+  );
+}
+
 function subscribeToRole() {
   return () => {};
 }
@@ -209,6 +217,7 @@ export default function ClarificationRequestsPage() {
         if (error) setMessage(`Failed to load requests: ${error.message}`);
         const loaded = (data || []) as ClarificationRequest[];
         setRequests(loaded);
+        cacheClarificationRequests(loaded);
         setSelectedId(loaded[0]?.id || "");
         setResponseDraft(loaded[0]?.management_response || "");
         setBoardNoteDraft(loaded[0]?.board_review_notes || "");
@@ -322,7 +331,11 @@ export default function ClarificationRequestsPage() {
       return;
     }
     const created = data as ClarificationRequest;
-    setRequests((previous) => [created, ...previous]);
+    setRequests((previous) => {
+      const next = [created, ...previous];
+      cacheClarificationRequests(next);
+      return next;
+    });
     setSelectedId(created.id);
     setForm(emptyForm);
     setMessage("Clarification request created and added to the protected trail.");
@@ -356,9 +369,13 @@ export default function ClarificationRequestsPage() {
       return;
     }
     const updated = data as ClarificationRequest;
-    setRequests((previous) =>
-      previous.map((item) => (item.id === updated.id ? updated : item))
-    );
+    setRequests((previous) => {
+      const next = previous.map((item) =>
+        item.id === updated.id ? updated : item
+      );
+      cacheClarificationRequests(next);
+      return next;
+    });
     setResponseDraft(updated.management_response || "");
     setBoardNoteDraft(updated.board_review_notes || "");
     setMessage(successMessage);

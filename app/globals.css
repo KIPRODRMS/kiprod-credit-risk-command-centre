@@ -743,6 +743,36 @@ button {
   border-color: #d6a84f;
   background: #fff9e9;
 }
+.board-report-prepared {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid #d6dde5;
+  border-top: 3px solid #d6a84f;
+  border-radius: .65rem;
+  background: #f7f9fb;
+}
+.board-report-prepared > div {
+  min-width: 0;
+  padding: .85rem 1rem;
+  border-right: 1px solid #d6dde5;
+}
+.board-report-prepared > div:last-child { border-right: 0; }
+.board-report-prepared span {
+  display: block;
+  color: #586779;
+  font-size: .62rem;
+  font-weight: 850;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+}
+.board-report-prepared strong {
+  display: block;
+  margin-top: .3rem;
+  color: #071426 !important;
+  font-size: .76rem;
+  line-height: 1.4;
+}
 .board-report-section {
   border: 1px solid #dfe5eb;
   border-radius: .65rem;
@@ -766,6 +796,54 @@ button {
 .board-report-context-item p { color: #586779 !important; font-size: .7rem; font-weight: 750; text-transform: uppercase; letter-spacing: .04em; }
 .board-report-context-item strong { display: block; margin-top: .2rem; color: #071426 !important; font-size: .9rem; }
 .board-report-narrative { border-left: 3px solid #d6a84f; padding-left: 1rem; }
+.board-report-executive-interpretation {
+  border: 1px solid #d6dde5;
+  border-left: 4px solid #d6a84f;
+  border-radius: .55rem;
+  background: #f7f9fb;
+  padding: 1rem 1.1rem;
+}
+.board-report-executive-interpretation > p {
+  color: #715013 !important;
+  font-size: .68rem;
+  font-weight: 900;
+  letter-spacing: .065em;
+  text-transform: uppercase;
+}
+.board-report-executive-interpretation > div {
+  margin-top: .4rem;
+  color: #26384c;
+  font-size: .9rem;
+  font-weight: 600;
+  line-height: 1.75;
+}
+.board-report-decisions {
+  padding-left: 1.4rem;
+  list-style: decimal;
+}
+.board-report-decisions li { padding-left: .25rem; }
+.board-report-decisions li::marker {
+  color: #9a6b12;
+  font-weight: 900;
+}
+.board-report-appendix-note {
+  border-left: 3px solid #d6a84f;
+  background: #f7f9fb;
+  padding: .8rem 1rem;
+  color: #34475c;
+  font-size: .82rem;
+  font-weight: 650;
+  line-height: 1.6;
+}
+.board-report-risk-group + .board-report-risk-group { margin-top: 1.4rem; }
+.board-report-risk-group-title {
+  margin-bottom: .55rem;
+  color: #071426 !important;
+  font-size: .78rem;
+  font-weight: 900;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
 .board-report-table-wrap { border: 1px solid #d6dde5; border-radius: .45rem; }
 .board-report-table { border-collapse: collapse; table-layout: fixed; min-width: 900px; }
 .board-report-table thead { background: #071426; color: #fff; }
@@ -810,6 +888,13 @@ button {
 .board-report-concentration-count { display: inline-grid; justify-self: center; min-width: 2.1rem; height: 1.65rem; place-items: center; border-radius: 999px; background: #9a6b12; color: #fff !important; font-weight: 900; }
 .board-report-concentration-value { color: #071426; font-weight: 850; text-align: right; white-space: nowrap; }
 @media (max-width: 720px) {
+  .board-report-prepared { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .board-report-prepared > div { border-bottom: 1px solid #d6dde5; }
+  .board-report-prepared > div:nth-child(2n) { border-right: 0; }
+  .board-report-prepared > div:last-child {
+    grid-column: 1 / -1;
+    border-bottom: 0;
+  }
   .board-report-concentration-grid { grid-template-columns: 1fr; }
   .board-report-concentration-columns { grid-template-columns: 2.25rem minmax(0, 1fr) 4.75rem; column-gap: .65rem; padding-inline: .75rem; }
   .board-report-concentration-columns > span { font-size: .54rem !important; }
@@ -1322,6 +1407,27 @@ main .grid > [class~="bg-white"] > p:first-child {
     border-radius: 1.5mm !important;
   }
 
+  .board-report-prepared {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    break-inside: avoid;
+  }
+
+  .board-report-prepared > div {
+    padding: 2.5mm !important;
+    border-right: .25mm solid #d6dde5 !important;
+    border-bottom: 0 !important;
+  }
+
+  .board-report-prepared > div:last-child {
+    grid-column: auto !important;
+    border-right: 0 !important;
+  }
+
+  .board-report-executive-interpretation,
+  .board-report-appendix-note {
+    break-inside: avoid;
+  }
+
   .board-report-metric {
     padding: 3mm !important;
     break-inside: avoid;
@@ -1346,6 +1452,15 @@ main .grid > [class~="bg-white"] > p:first-child {
   .board-report-risk-badge {
     padding: .5mm 1mm !important;
     font-size: 6pt !important;
+  }
+
+  .board-report-risk-group-title {
+    margin-top: 4mm;
+    break-after: avoid;
+  }
+
+  .board-report-risk-group + .board-report-risk-group {
+    break-before: page;
   }
 
   .board-report-footer {

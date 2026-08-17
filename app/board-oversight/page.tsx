@@ -93,6 +93,12 @@ function isClosed(action: ActionItem) {
   return CLOSED_STATUSES.includes(String(action.status || "").toLowerCase());
 }
 
+function isOverdue(action: ActionItem) {
+  if (!action.due_date || isClosed(action)) return false;
+  const due = new Date(`${action.due_date}T23:59:59`);
+  return !Number.isNaN(due.getTime()) && due.getTime() < Date.now();
+}
+
 function daysOverdue(dateValue: string) {
   if (!dateValue) return 0;
   const due = new Date(`${dateValue}T23:59:59`);
@@ -113,6 +119,10 @@ function readStored<T>(key: string, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+function isClarificationOpen(request: ClarificationRequest) {
+  return String(request.status || "").toLowerCase() !== "closed";
 }
 
 function appendAudit(
@@ -176,7 +186,10 @@ export default function BoardOversightPage() {
   const [actions] = useState<ActionItem[]>(() =>
     readStored<ActionItem[]>("kiprod_action_items", [])
   );
-  const [clarifications, setClarifications] = useState<ClarificationRequest[]>([]);
+  const [clarifications, setClarifications] = useState<ClarificationRequest[]>(
+    () =>
+      readStored<ClarificationRequest[]>("kiprodClarificationRequests", [])
+  );
   const [boardNotes, setBoardNotes] = useState<BoardNote[]>(() =>
     readStored<BoardNote[]>("kiprod_board_notes", [])
   );
@@ -206,6 +219,14 @@ export default function BoardOversightPage() {
   });
 
   useEffect(() => {
+    const storedClarifications = readStored<ClarificationRequest[]>(
+      "kiprodClarificationRequests",
+      []
+    );
+    if (storedClarifications.length > 0) {
+      return;
+    }
+
     const institutionId =
       process.env.NEXT_PUBLIC_DEFAULT_INSTITUTION_ID || "";
     if (institutionId) {
@@ -216,25 +237,36 @@ export default function BoardOversightPage() {
         )
         .eq("institution_id", institutionId)
         .order("created_at", { ascending: false })
-        .then(({ data }) =>
-          setClarifications((data || []) as ClarificationRequest[])
-        );
+        .then(({ data }) => {
+          const loaded = (data || []) as ClarificationRequest[];
+          setClarifications(loaded);
+          localStorage.setItem(
+            "kiprodClarificationRequests",
+            JSON.stringify(loaded)
+          );
+        });
     }
   }, []);
 
   const analysis = useMemo(() => {
-    const totalExposure = records.reduce(
-      (sum, record) => sum + Number(record.outstanding_balance || 0),
-      0
-    );
-    const highExposureThreshold = Math.max(totalExposure * 0.05, 1_000_000);
     const recordMap = new Map(
       records.map((record) => [record.loan_account, record])
     );
-
-    const openClarifications = clarifications.filter(
-      (request) => !["Closed", "Converted to Action"].includes(request.status)
+    const watchlist = records.filter((record) =>
+      ["Amber", "Red", "NPL"].includes(record.risk_status)
     );
+    const highExposureRecords = [...watchlist]
+      .sort(
+        (a, b) =>
+          Number(b.outstanding_balance || 0) -
+          Number(a.outstanding_balance || 0)
+      )
+      .slice(0, Math.min(10, watchlist.length));
+    const highExposureLoans = new Set(
+      highExposureRecords.map((record) => record.loan_account)
+    );
+
+    const openClarifications = clarifications.filter(isClarificationOpen);
 
     const candidateActions = actions.filter((action) => {
       const record = recordMap.get(action.loan_account);
@@ -242,9 +274,9 @@ export default function BoardOversightPage() {
       const escalationLevel = String(action.escalation_level || "");
       return (
         !isClosed(action) &&
-        (daysOverdue(action.due_date) > 0 ||
+        (isOverdue(action) ||
           action.risk_status === "NPL" ||
-          Number(record?.outstanding_balance || 0) >= highExposureThreshold ||
+          highExposureLoans.has(action.loan_account) ||
           escalationLevel.includes("Level 4") ||
           action.board_visible ||
           flags.includes("deteriorat") ||
@@ -267,9 +299,10 @@ export default function BoardOversightPage() {
       const exposure = Number(record?.outstanding_balance || 0);
       const reasons: string[] = [];
 
-      if (daysOverdue(action.due_date) > 0) reasons.push("Action overdue");
+      if (isOverdue(action)) reasons.push("Action overdue");
       if (action.risk_status === "NPL") reasons.push("NPL account");
-      if (exposure >= highExposureThreshold) reasons.push("Material exposure");
+      if (highExposureLoans.has(action.loan_account))
+        reasons.push("Top 10 watchlist exposure");
       if (escalationLevel.includes("Level 4"))
         reasons.push("Level 4 escalation");
       if (flags.includes("deteriorat") || flags.includes("repeat"))
@@ -311,7 +344,8 @@ export default function BoardOversightPage() {
       const exposure = Number(record.outstanding_balance || 0);
       const reasons: string[] = [];
       if (record.risk_status === "NPL") reasons.push("NPL account");
-      if (exposure >= highExposureThreshold) reasons.push("Material exposure");
+      if (highExposureLoans.has(record.loan_account))
+        reasons.push("Top 10 watchlist exposure");
       if (!String(record.responsible_officer || "").trim())
         reasons.push("No responsible officer");
       if (flags.includes("deteriorat") || flags.includes("repeat"))
@@ -347,15 +381,13 @@ export default function BoardOversightPage() {
 
     return {
       issues,
-      overdue: issues.filter((issue) => issue.daysOverdue > 0).length,
+      overdue: actions.filter(isOverdue).length,
       escalated: issues.filter((issue) =>
         issue.escalationLevel.match(/Level [34]/)
       ).length,
       npl: issues.filter((issue) => issue.riskClass === "NPL").length,
       unresolvedClarifications: openClarifications.length,
-      highExposure: issues.filter((issue) =>
-        issue.visibilityReasons.includes("Material exposure")
-      ).length,
+      highExposure: highExposureRecords.length,
       deterioration: issues.filter((issue) =>
         issue.visibilityReasons.includes("Repeated deterioration")
       ).length,
@@ -450,10 +482,14 @@ export default function BoardOversightPage() {
       return;
     }
 
-    setClarifications((current) => [
-      data as ClarificationRequest,
-      ...current,
-    ]);
+    setClarifications((current) => {
+      const next = [data as ClarificationRequest, ...current];
+      localStorage.setItem(
+        "kiprodClarificationRequests",
+        JSON.stringify(next)
+      );
+      return next;
+    });
     appendAudit(
       "BOARD_CLARIFICATION_REQUESTED",
       issue,
@@ -531,14 +567,20 @@ export default function BoardOversightPage() {
 
         <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Metric label="Board-Visible Risks" value={analysis.issues.length} note="Material or unresolved matters" tone="red" />
-          <Metric label="Overdue Actions" value={analysis.overdue} note="Past agreed management due date" tone="amber" />
+          <Metric label="Overdue Actions" value={analysis.overdue} note="Due before today and not Closed" tone="amber" />
           <Metric label="Escalated Accounts" value={analysis.escalated} note="Level 3 or Level 4 matters" tone="red" />
           <Metric label="NPL Attention" value={analysis.npl} note="Non-performing matters visible here" tone="red" />
-          <Metric label="Unresolved Clarifications" value={analysis.unresolvedClarifications} note="Awaiting closure or response" tone="blue" />
-          <Metric label="High Exposure Accounts" value={analysis.highExposure} note="Material exposure threshold triggered" tone="amber" />
+          <Metric label="Unresolved Clarifications" value={analysis.unresolvedClarifications} note="Every status except Closed" tone="blue" />
+          <Metric label="High Exposure Accounts" value={analysis.highExposure} note="Top 10 watchlist exposures" tone="amber" />
           <Metric label="Repeated Deterioration" value={analysis.deterioration} note="Repeated-risk flags identified" tone="amber" />
           <Metric label="Last Report Generated" value={lastReport} note="Formal Board Report reference" tone="slate" />
         </section>
+
+        <p className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-950">
+          Summary figures use the same complete Command Centre action,
+          portfolio, and clarification records as the Board Report. The
+          detailed register below is the Board-visible governance subset.
+        </p>
 
         <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 text-slate-950 shadow-sm">
           <div className="flex flex-wrap items-end justify-between gap-3">
@@ -548,8 +590,8 @@ export default function BoardOversightPage() {
               </h2>
               <p className="mt-1 text-sm text-slate-600">
                 Board-visible matters are selected through overdue, NPL,
-                material-exposure, Level 4, deterioration, clarification, and
-                ownership triggers.
+                top-10 watchlist exposure, Level 4, deterioration,
+                clarification, and ownership triggers.
               </p>
             </div>
             <p className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
@@ -670,8 +712,8 @@ export default function BoardOversightPage() {
             </h2>
             <p className="mt-2 text-sm leading-6 text-slate-700">
               {analysis.overdue > 0
-                ? `${analysis.overdue} Board-visible management action${analysis.overdue === 1 ? " is" : "s are"} beyond the agreed due date and require accountability follow-up.`
-                : "No Board-visible management action is currently overdue."}
+                ? `${analysis.overdue} management action${analysis.overdue === 1 ? " is" : "s are"} due before today, not Closed, and require accountability follow-up.`
+                : "No management action in the Command Centre is currently overdue."}
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-5 text-slate-950 shadow-sm">

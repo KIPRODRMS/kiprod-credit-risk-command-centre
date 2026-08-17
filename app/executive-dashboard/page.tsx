@@ -41,6 +41,22 @@ function clamp(value: number) {
   return Math.max(0, Math.min(100, value));
 }
 
+function isOverdue(action: ActionItem) {
+  if (
+    !action.due_date ||
+    ["closed", "completed", "done"].includes(
+      String(action.status || "").toLowerCase()
+    )
+  ) {
+    return false;
+  }
+
+  const dueDate = new Date(`${action.due_date}T00:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return !Number.isNaN(dueDate.getTime()) && dueDate.getTime() < today.getTime();
+}
+
 export default function ExecutiveDashboardPage() {
   const [records, setRecords] = useState<LoanRecord[]>([]);
   const [actions, setActions] = useState<ActionItem[]>([]);
@@ -84,10 +100,7 @@ export default function ExecutiveDashboardPage() {
       .filter((r) => Number(r.days_in_arrears) > days)
       .reduce((sum, r) => sum + Number(r.outstanding_balance || 0), 0);
     const parAccounts = (days: number) => records.filter((r) => Number(r.days_in_arrears) > days).length;
-    const today = new Date().toISOString().slice(0, 10);
-    const actionsDue = actions.filter(
-      (a) => !["Completed", "Closed"].includes(a.status) && a.due_date && a.due_date <= today
-    ).length;
+    const actionsDue = actions.filter(isOverdue).length;
     const risk = { Green: count("Green"), Amber: count("Amber"), Red: count("Red"), NPL: count("NPL") };
     const performingRate = records.length ? (risk.Green / records.length) * 100 : 0;
     const arrearsRate = outstandingBalance ? (totalArrears / outstandingBalance) * 100 : 0;
@@ -196,7 +209,7 @@ export default function ExecutiveDashboardPage() {
             <div className="cockpit-attention-list">
               <a href="/early-warning"><span className="attention-red" /><div><strong>{metrics.risk.Red} high-risk accounts</strong><small>Require management escalation</small></div><b>→</b></a>
               <a href="/watchlist"><span className="attention-npl" /><div><strong>{metrics.risk.NPL} NPL accounts</strong><small>Require recovery attention</small></div><b>→</b></a>
-              <a href="/action-tracker"><span className="attention-gold" /><div><strong>{metrics.actionsDue} actions due</strong><small>Require accountability follow-up</small></div><b>→</b></a>
+              <a href="/action-tracker"><span className="attention-gold" /><div><strong>{metrics.actionsDue} overdue actions</strong><small>Past due date and not closed</small></div><b>→</b></a>
             </div>
           </article>
         </section>
@@ -206,7 +219,7 @@ export default function ExecutiveDashboardPage() {
           <article><span>Watchlist accounts</span><strong className="risk-amber-text">{metrics.watchlist}</strong><small>Amber, Red and NPL</small></article>
           <article><span>PAR 30</span><strong className="risk-red-text">{metrics.par30.toFixed(1)}%</strong><small>{metrics.par30Accounts} accounts</small></article>
           <article><span>PAR 90</span><strong className="risk-npl-text">{metrics.par90.toFixed(1)}%</strong><small>{metrics.par90Accounts} accounts</small></article>
-          <article><span>Actions due</span><strong className="risk-amber-text">{metrics.actionsDue}</strong><small>Management follow-up</small></article>
+          <article><span>Overdue actions</span><strong className="risk-amber-text">{metrics.actionsDue}</strong><small>Past due date and not closed</small></article>
         </section>
 
         <section className="cockpit-insight-grid">
