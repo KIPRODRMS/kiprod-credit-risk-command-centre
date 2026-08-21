@@ -33,7 +33,7 @@ type ActionItem = {
   action_required: string;
   assigned_to: string;
   due_date: string;
-  status: "New" | "Assigned";
+  status: string;
   escalation_level: string;
   board_visible: boolean;
   notes: string;
@@ -115,10 +115,7 @@ function parseCsvRows(csvText: string) {
     return row;
   });
 
-  return {
-    headers,
-    rows,
-  };
+  return { headers, rows };
 }
 
 function validateRows(headers: string[], rows: Record<string, string>[]) {
@@ -152,7 +149,6 @@ function validateRows(headers: string[], rows: Record<string, string>[]) {
 
     numericColumns.forEach((column) => {
       const value = Number(row[column]);
-
       if (row[column] === "" || Number.isNaN(value)) {
         errors.push(`Row ${rowNumber}: ${column} must be numeric.`);
       }
@@ -162,7 +158,6 @@ function validateRows(headers: string[], rows: Record<string, string>[]) {
       if (loanAccounts.has(row.loan_account)) {
         duplicateLoanAccounts.add(row.loan_account);
       }
-
       loanAccounts.add(row.loan_account);
     }
   });
@@ -198,11 +193,13 @@ function buildLoanRecords(rows: Record<string, string>[]): LoanRecord[] {
       responsible_officer: row.responsible_officer || "",
       restructured: row.restructured || "No",
       risk_status: getRiskStatus(daysInArrears),
-      risk_flags: row.restructured?.toLowerCase() === "yes" ? ["Restructured Risk"] : [],
+      risk_flags:
+        row.restructured?.toLowerCase() === "yes"
+          ? ["Restructured Risk"]
+          : [],
     };
   });
 
-  // MVP material-exposure rule: flag the ten largest live balances.
   const highExposureAccounts = new Set(
     [...records]
       .filter((record) => record.risk_status !== "Green")
@@ -227,19 +224,30 @@ function addDays(date: Date, days: number) {
 
 function buildInitialActions(records: LoanRecord[]): ActionItem[] {
   const today = new Date();
+
   return records
-    .filter((record) => record.risk_status !== "Green" || record.risk_flags?.includes("High Exposure"))
+    .filter(
+      (record) =>
+        record.risk_status !== "Green" ||
+        record.risk_flags?.includes("High Exposure")
+    )
     .map((record, index) => {
       const isNpl = record.risk_status === "NPL";
       const isRed = record.risk_status === "Red";
-      const isHighExposure = record.risk_flags?.includes("High Exposure") ?? false;
+      const isHighExposure =
+        record.risk_flags?.includes("High Exposure") ?? false;
       const dueInDays = isNpl ? 0 : isRed || isHighExposure ? 3 : 7;
+
       return {
         action_id: `ACT-${String(index + 1).padStart(4, "0")}`,
         loan_account: record.loan_account,
         member_name: record.member_name,
         risk_status: record.risk_status,
-        risk_source: isHighExposure ? "High Exposure" : isNpl ? "NPL" : "Early Warning",
+        risk_source: isHighExposure
+          ? "High Exposure"
+          : isNpl
+            ? "NPL"
+            : "Early Warning",
         action_required: isNpl
           ? "Move to recovery attention and prepare an account recovery strategy."
           : isRed || isHighExposure
@@ -248,16 +256,99 @@ function buildInitialActions(records: LoanRecord[]): ActionItem[] {
         assigned_to: record.responsible_officer || "",
         due_date: addDays(today, dueInDays),
         status: record.responsible_officer ? "Assigned" : "New",
-        escalation_level: isNpl || isHighExposure
-          ? "Level 3: Senior Management Escalation"
-          : isRed
-            ? "Level 2: Credit Manager Review"
-            : "Level 1: Officer Follow-up",
+        escalation_level:
+          isNpl || isHighExposure
+            ? "Level 3: Senior Management Escalation"
+            : isRed
+              ? "Level 2: Credit Manager Review"
+              : "Level 1: Officer Follow-up",
         board_visible: isNpl || isHighExposure,
         notes: "Automatically created from the latest portfolio upload.",
         last_updated: new Date().toISOString(),
       };
     });
+}
+
+function getActionSequence(actionId: string) {
+  const match = /^ACT-(\d+)$/.exec(String(actionId || ""));
+  return match ? Number(match[1]) : 0;
+}
+
+function mergeExecutionActions(
+  records: LoanRecord[],
+  generatedActions: ActionItem[]
+) {
+  let existingActions: ActionItem[] = [];
+
+  try {
+    const parsed = JSON.parse(
+      localStorage.getItem("kiprod_action_items") || "[]"
+    );
+    if (Array.isArray(parsed)) {
+      existingActions = parsed.filter(
+        (action) =>
+          action &&
+          typeof action === "object" &&
+          typeof action.loan_account === "string" &&
+          action.loan_account.trim().length > 0
+      );
+    }
+  } catch {
+    existingActions = [];
+  }
+
+  if (existingActions.length === 0) {
+    return {
+      actions: generatedActions,
+      preservedCount: 0,
+      createdCount: generatedActions.length,
+    };
+  }
+
+  const recordMap = new Map(
+    records.map((record) => [record.loan_account, record])
+  );
+
+  const preservedActions = existingActions.map((action) => {
+    const record = recordMap.get(action.loan_account);
+    if (!record) return action;
+
+    const isHighExposure =
+      record.risk_flags?.includes("High Exposure") ?? false;
+
+    return {
+      ...action,
+      member_name: record.member_name || action.member_name,
+      risk_status: record.risk_status,
+      risk_source: isHighExposure
+        ? "High Exposure"
+        : record.risk_status === "NPL"
+          ? "NPL"
+          : record.risk_status === "Amber" || record.risk_status === "Red"
+            ? "Early Warning"
+            : action.risk_source,
+    };
+  });
+
+  const existingLoanAccounts = new Set(
+    preservedActions.map((action) => action.loan_account)
+  );
+
+  let nextSequence =
+    Math.max(0, ...preservedActions.map((action) => getActionSequence(action.action_id))) + 1;
+
+  const newActions = generatedActions
+    .filter((action) => !existingLoanAccounts.has(action.loan_account))
+    .map((action) => ({
+      ...action,
+      action_id: `ACT-${String(nextSequence++).padStart(4, "0")}`,
+    }));
+
+  return {
+    actions: [...preservedActions, ...newActions],
+    preservedCount: preservedActions.length,
+    createdCount: newActions.length,
+  };
 }
 
 function writePortfolioUploadAudit(
@@ -335,34 +426,39 @@ export default function PortfolioUploadPage() {
     }
 
     const records = buildLoanRecords(rows);
-    const actions = buildInitialActions(records);
+    const generatedActions = buildInitialActions(records);
+    const { actions, preservedCount, createdCount } = mergeExecutionActions(
+      records,
+      generatedActions
+    );
     const uploadedAt = new Date().toISOString();
 
     localStorage.setItem("kiprod_loan_records", JSON.stringify(records));
     localStorage.setItem("kiprod_action_items", JSON.stringify(actions));
-    localStorage.setItem("kiprod_portfolio_source", JSON.stringify({
-      sourceName,
-      uploadedAt,
-      recordCount: records.length,
-    }));
+    localStorage.setItem(
+      "kiprod_portfolio_source",
+      JSON.stringify({
+        sourceName,
+        uploadedAt,
+        recordCount: records.length,
+      })
+    );
 
     const amberCount = records.filter(
       (record) => record.risk_status === "Amber"
     ).length;
-
     const redCount = records.filter(
       (record) => record.risk_status === "Red"
     ).length;
-
     const nplCount = records.filter(
       (record) => record.risk_status === "NPL"
     ).length;
-
-    const watchlistCount = records.filter(
-      (record) => record.risk_status !== "Green"
+    const watchlistCount = records.filter((record) =>
+      ["Amber", "Red", "NPL"].includes(record.risk_status)
     ).length;
-
-    const greenCount = records.length - watchlistCount;
+    const greenCount = records.filter(
+      (record) => record.risk_status === "Green"
+    ).length;
 
     writePortfolioUploadAudit(records, sourceName, {
       green: greenCount,
@@ -372,13 +468,17 @@ export default function PortfolioUploadPage() {
     });
 
     setSuccessMessage(
-      `Portfolio saved successfully. ${records.length} loan accounts processed and ${actions.length} management actions created. Risk classification completed. Amber: ${amberCount}, Red: ${redCount}, NPL: ${nplCount}, Watchlist: ${watchlistCount}. Executive Cockpit, Early Warning Register, Watchlist, Board Report, and Execution Tracker have been updated.`
+      `Portfolio saved successfully. ${records.length} loan accounts processed. ` +
+        `Risk classification completed. Green: ${greenCount}, Amber: ${amberCount}, ` +
+        `Red: ${redCount}, NPL: ${nplCount}, Watchlist: ${watchlistCount}. ` +
+        `Execution accountability preserved: ${preservedCount} existing actions retained and ` +
+        `${createdCount} new actions created. Executive Cockpit, Early Warning Register, ` +
+        `Watchlist, Board Report, and Execution Tracker have been refreshed.`
     );
   }
 
   async function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-
     if (!file) return;
 
     setIsReadingFile(true);
@@ -391,13 +491,22 @@ export default function PortfolioUploadPage() {
         throw new Error("Please select a CSV or Excel file (.csv, .xlsx or .xls). ");
       }
 
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", raw: false });
+      const workbook = XLSX.read(await file.arrayBuffer(), {
+        type: "array",
+        raw: false,
+      });
       const firstSheetName = workbook.SheetNames[0];
-      if (!firstSheetName) throw new Error("The selected file does not contain a worksheet.");
+      if (!firstSheetName) {
+        throw new Error("The selected file does not contain a worksheet.");
+      }
 
       const worksheet = workbook.Sheets[firstSheetName];
-      const normalizedCsv = XLSX.utils.sheet_to_csv(worksheet, { blankrows: false });
-      if (!normalizedCsv.trim()) throw new Error("The selected worksheet is empty.");
+      const normalizedCsv = XLSX.utils.sheet_to_csv(worksheet, {
+        blankrows: false,
+      });
+      if (!normalizedCsv.trim()) {
+        throw new Error("The selected worksheet is empty.");
+      }
 
       setCsvText(normalizedCsv);
       setSourceName(file.name);
@@ -427,10 +536,9 @@ export default function PortfolioUploadPage() {
 
           <p className="mt-2 max-w-3xl text-slate-600">
             Upload or paste the official KIPROD portfolio template in CSV or
-            Excel format. The
-            system validates the file, classifies accounts by days in arrears,
-            and updates the Executive Cockpit, Early Warning Register,
-            Watchlist, Board Report, and Execution Tracker.
+            Excel format. The system validates the file, classifies accounts by
+            days in arrears, and updates the Executive Cockpit, Early Warning
+            Register, Watchlist, Board Report, and Execution Tracker.
           </p>
         </div>
 
@@ -442,8 +550,7 @@ export default function PortfolioUploadPage() {
           <p className="mt-3 leading-7 text-slate-300">
             member_name, member_number, loan_account, loan_product, branch,
             employer, sector, loan_amount, outstanding_balance, arrears_amount,
-            days_in_arrears, repayment_status, responsible_officer,
-            restructured
+            days_in_arrears, repayment_status, responsible_officer, restructured
           </p>
         </div>
 
@@ -513,7 +620,6 @@ export default function PortfolioUploadPage() {
           {errorMessages.length > 0 && (
             <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4">
               <p className="font-bold text-red-800">Upload validation failed</p>
-
               <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-red-700">
                 {errorMessages.map((error) => (
                   <li key={error}>{error}</li>
@@ -527,7 +633,6 @@ export default function PortfolioUploadPage() {
               <p className="font-bold text-green-800">
                 Portfolio saved successfully
               </p>
-
               <p className="mt-2 text-sm leading-6 text-green-700">
                 {successMessage}
               </p>
