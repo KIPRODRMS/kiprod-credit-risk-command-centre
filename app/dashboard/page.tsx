@@ -74,11 +74,11 @@ export default function DashboardPage() {
     ).length;
 
     const par30 = records.filter(
-      (record) => Number(record.days_in_arrears || 0) >= 30
+      (record) => Number(record.days_in_arrears || 0) > 30
     ).length;
 
     const par90 = records.filter(
-      (record) => Number(record.days_in_arrears || 0) >= 90
+      (record) => Number(record.days_in_arrears || 0) > 90
     ).length;
 
     return {

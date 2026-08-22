@@ -184,8 +184,8 @@ export default function BoardPackPage() {
     const byRisk = (risk: RiskStatus) =>
       records.filter((row) => row.risk_status === risk);
     const npl = byRisk("NPL");
-    const par30 = records.filter((row) => Number(row.days_in_arrears || 0) >= 30);
-    const par90 = records.filter((row) => Number(row.days_in_arrears || 0) >= 90);
+    const par30 = records.filter((row) => Number(row.days_in_arrears || 0) > 30);
+    const par90 = records.filter((row) => Number(row.days_in_arrears || 0) > 90);
     // Official Command Centre definition: Watchlist = Amber + Red + NPL.
     const watchlist = records.filter((row) =>
       ["Amber", "Red", "NPL"].includes(row.risk_status)

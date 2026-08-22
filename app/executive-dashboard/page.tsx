@@ -95,10 +95,10 @@ export default function ExecutiveDashboardPage() {
     const totalArrears = records.reduce((sum, r) => sum + Number(r.arrears_amount || 0), 0);
     const count = (status: RiskStatus) => records.filter((r) => r.risk_status === status).length;
     const parBalance = (days: number) => records
-      .filter((r) => Number(r.days_in_arrears || 0) >= days)
+      .filter((r) => Number(r.days_in_arrears || 0) > days)
       .reduce((sum, r) => sum + Number(r.outstanding_balance || 0), 0);
     const parAccounts = (days: number) => records.filter(
-      (r) => Number(r.days_in_arrears || 0) >= days
+      (r) => Number(r.days_in_arrears || 0) > days
     ).length;
     const actionsDue = actions.filter(isOverdue).length;
     const risk = { Green: count("Green"), Amber: count("Amber"), Red: count("Red"), NPL: count("NPL") };
