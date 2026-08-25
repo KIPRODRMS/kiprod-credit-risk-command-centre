@@ -1,6 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  isActionOverdue,
+  isPar30,
+  isPar90,
+  PAR30_SHORTHAND,
+  PAR90_SHORTHAND,
+} from "@/lib/riskPolicy";
 
 type RiskStatus = "Green" | "Amber" | "Red" | "NPL";
 
@@ -42,17 +49,7 @@ function clamp(value: number) {
 }
 
 function isOverdue(action: ActionItem) {
-  if (
-    !action.due_date ||
-    ["closed", "completed", "done"].includes(
-      String(action.status || "").toLowerCase()
-    )
-  ) {
-    return false;
-  }
-
-  const dueDate = new Date(`${action.due_date}T23:59:59`);
-  return !Number.isNaN(dueDate.getTime()) && dueDate.getTime() < Date.now();
+  return isActionOverdue(action);
 }
 
 export default function ExecutiveDashboardPage() {
@@ -94,12 +91,20 @@ export default function ExecutiveDashboardPage() {
     const outstandingBalance = records.reduce((sum, r) => sum + Number(r.outstanding_balance || 0), 0);
     const totalArrears = records.reduce((sum, r) => sum + Number(r.arrears_amount || 0), 0);
     const count = (status: RiskStatus) => records.filter((r) => r.risk_status === status).length;
+    const matchesPar = (record: LoanRecord, days: number) =>
+      days === 30
+        ? isPar30(record.days_in_arrears)
+        : days === 90
+          ? isPar90(record.days_in_arrears)
+          : Number(record.days_in_arrears || 0) > days;
     const parBalance = (days: number) => records
-      .filter((r) => Number(r.days_in_arrears || 0) > days)
-      .reduce((sum, r) => sum + Number(r.outstanding_balance || 0), 0);
-    const parAccounts = (days: number) => records.filter(
-      (r) => Number(r.days_in_arrears || 0) > days
-    ).length;
+      .filter((record) => matchesPar(record, days))
+      .reduce(
+        (sum, record) => sum + Number(record.outstanding_balance || 0),
+        0
+      );
+    const parAccounts = (days: number) =>
+      records.filter((record) => matchesPar(record, days)).length;
     const actionsDue = actions.filter(isOverdue).length;
     const risk = { Green: count("Green"), Amber: count("Amber"), Red: count("Red"), NPL: count("NPL") };
     const performingRate = records.length ? (risk.Green / records.length) * 100 : 0;
@@ -177,7 +182,7 @@ export default function ExecutiveDashboardPage() {
                 <div><strong>{healthScore}</strong><span>/ 100</span><small>Health index</small></div>
               </div>
               <div className="cockpit-health-notes">
-                <div><span>Performing portfolio</span><strong>{metrics.performingRate.toFixed(1)}%</strong></div>
+                <div><span>Current accounts</span><strong>{metrics.performingRate.toFixed(1)}%</strong></div>
                 <div><span>PAR 30 exposure</span><strong className="risk-amber-text">{metrics.par30.toFixed(1)}%</strong></div>
                 <div><span>PAR 90 exposure</span><strong className="risk-red-text">{metrics.par90.toFixed(1)}%</strong></div>
               </div>
@@ -193,7 +198,7 @@ export default function ExecutiveDashboardPage() {
             <p>Outstanding balance across {records.length} monitored accounts</p>
             <div className="cockpit-exposure-scale">
               <i style={{ width: `${clamp(metrics.performingRate)}%` }} />
-              <span>Performing {metrics.performingRate.toFixed(1)}%</span>
+              <span>Current accounts {metrics.performingRate.toFixed(1)}%</span>
             </div>
             <div className="cockpit-exposure-footer">
               <div><span>Total portfolio</span><strong>{formatKes(metrics.totalPortfolio, true)}</strong></div>
@@ -203,7 +208,7 @@ export default function ExecutiveDashboardPage() {
 
           <article className="cockpit-attention-panel">
             <div className="cockpit-panel-heading cockpit-panel-heading-dark">
-              <div><span>Governance priority</span><h2>Board attention</h2></div>
+              <div><span>Governance priority</span><h2>Management attention</h2></div>
               <em>{attentionCount}</em>
             </div>
             <div className="cockpit-attention-list">
@@ -217,8 +222,8 @@ export default function ExecutiveDashboardPage() {
         <section className="cockpit-kpi-grid">
           <article><span>Outstanding balance</span><strong>{formatKes(metrics.outstandingBalance, true)}</strong><small>Live exposure</small></article>
           <article><span>Watchlist accounts</span><strong className="risk-amber-text">{metrics.watchlist}</strong><small>Amber, Red and NPL</small></article>
-          <article><span>PAR 30</span><strong className="risk-red-text">{metrics.par30.toFixed(1)}%</strong><small>{metrics.par30Accounts} accounts · 30+ DPD</small></article>
-          <article><span>PAR 90</span><strong className="risk-npl-text">{metrics.par90.toFixed(1)}%</strong><small>{metrics.par90Accounts} accounts · 90+ DPD</small></article>
+          <article><span>PAR 30</span><strong className="risk-red-text">{metrics.par30.toFixed(1)}%</strong><small>{metrics.par30Accounts} accounts · {PAR30_SHORTHAND}</small></article>
+          <article><span>PAR 90</span><strong className="risk-npl-text">{metrics.par90.toFixed(1)}%</strong><small>{metrics.par90Accounts} accounts · {PAR90_SHORTHAND}</small></article>
           <article><span>Overdue actions</span><strong className="risk-amber-text">{metrics.actionsDue}</strong><small>Past due date and not closed</small></article>
         </section>
 

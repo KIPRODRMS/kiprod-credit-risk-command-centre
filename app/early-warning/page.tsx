@@ -3,6 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import Pagination from "../components/Pagination";
 import RegisterSearch from "../components/RegisterSearch";
+import {
+  getHighExposureLoanAccounts,
+  isWatchlistStatus,
+} from "@/lib/riskPolicy";
 
 type RiskStatus = "Green" | "Amber" | "Red" | "NPL";
 type RiskFilter =
@@ -73,13 +77,7 @@ function hasFlag(record: LoanRecord, flag: string) {
 }
 
 function applyHighExposureRule(records: LoanRecord[]) {
-  const topAccounts = new Set(
-    records
-      .filter((record) => record.risk_status !== "Green")
-      .sort((a, b) => b.outstanding_balance - a.outstanding_balance)
-      .slice(0, 10)
-      .map((record) => record.loan_account)
-  );
+  const topAccounts = getHighExposureLoanAccounts(records);
 
   return records.map((record) => ({
     ...record,
@@ -154,10 +152,7 @@ export default function EarlyWarningPage() {
 
   const riskyRecords = useMemo(() => {
     return records
-      .filter(
-        (record) =>
-          record.risk_status !== "Green" || hasFlag(record, "High Exposure")
-      )
+      .filter((record) => isWatchlistStatus(record.risk_status))
       .sort((a, b) => b.days_in_arrears - a.days_in_arrears);
   }, [records]);
 
@@ -294,7 +289,7 @@ export default function EarlyWarningPage() {
                 </div>
                 <div className="rounded-2xl bg-white p-5 shadow-sm">
                   <p className="text-sm font-semibold text-slate-800">
-                    Total Exposure at Risk
+                    Watchlist Exposure
                   </p>
                   <p className="mt-2 text-xl font-bold text-slate-950">
                     {formatKes(summary.exposure)}

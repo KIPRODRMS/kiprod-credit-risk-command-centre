@@ -2479,6 +2479,14 @@ main .grid > [class~="bg-white"] > :is(h2, h3, strong) {
   -webkit-text-fill-color: #0b1729;
 }
 
+/* Recovery portal dark overlay cards own a white foreground. This selector
+   intentionally outranks the legacy light-card contrast rules. */
+.motion-page.route-recovery-manager-portal main .recovery-overlay-card,
+.motion-page.route-recovery-manager-portal main .recovery-overlay-card :is(strong, span) {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
 :is(.route-early-warning, .route-watchlist, .route-action-tracker, .route-dashboard)
 main .grid > [class~="bg-white"] > :is(.text-amber-600, .text-amber-700, .text-amber-800) {
   color: #b45309 !important;
@@ -2594,4 +2602,37 @@ main .grid > [class~="bg-white"] > .text-red-800 {
 .motion-page.route-audit-history main input::placeholder {
   color: #294968 !important;
   -webkit-text-fill-color: #294968;
+}
+
+/* Board Portal executive header context must remain readable on navy. */
+.motion-page.route-board-portal main header span.rounded-full {
+  color: #e2e8f0 !important;
+  -webkit-text-fill-color: #e2e8f0 !important;
+}
+
+/* Board Portal dark executive panels require high-contrast white copy. */
+.motion-page.route-board-portal main div[class*="bg-[#0b1d33]"] :is(h2, p),
+.motion-page.route-board-portal main #reports :is(h2, p) {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+/* Allow the two clarification counters to wrap as complete status bubbles. */
+.motion-page.route-board-portal main #clarifications > div:first-child > div:last-child {
+  flex-wrap: wrap !important;
+  justify-content: flex-end;
+}
+
+.motion-page.route-board-portal main #clarifications span.rounded-full {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  min-height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.6rem 0.8rem !important;
+  white-space: nowrap;
+  line-height: 1.2;
+  text-align: center;
 }

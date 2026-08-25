@@ -4,7 +4,10 @@ import { useEffect, useState } from "react";
 
 const roles = [
   "KIPROD Admin",
-  "Board Viewer / Board Member",
+  "Institution Admin",
+  "Board Chair",
+  "Board Member",
+  "Board Secretary",
   "CEO",
   "Risk Manager",
   "Credit Manager",

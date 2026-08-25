@@ -4,6 +4,13 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import Pagination from "../components/Pagination";
 import RegisterSearch from "../components/RegisterSearch";
+import {
+  getDefaultActionText,
+  getDefaultEscalationLevel,
+  getInitialActionDueDate,
+  isActionOverdue,
+  isWatchlistStatus,
+} from "@/lib/riskPolicy";
 
 type RiskStatus = "Green" | "Amber" | "Red" | "NPL";
 type ActionStatus =
@@ -79,7 +86,6 @@ const statuses: ActionStatus[] = [
   "Escalated",
   "Moved to Recovery",
   "Closed",
-  "Overdue",
 ];
 
 const escalationLevels: EscalationLevel[] = [
@@ -104,11 +110,7 @@ const filters = [
 ] as const;
 
 function getDefaultAction(record: LoanRecord): string {
-  if (record.risk_status === "Amber")
-    return "Contact borrower, confirm the cause of arrears and agree a repayment correction.";
-  if (record.risk_status === "Red")
-    return "Escalate for manager review and agree a structured intervention plan.";
-  return "Move to recovery attention and prepare an account recovery strategy.";
+  return getDefaultActionText(record);
 }
 
 function getRiskSource(record: LoanRecord): string {
@@ -122,18 +124,11 @@ function getRiskSource(record: LoanRecord): string {
 }
 
 function getEscalation(record: LoanRecord): EscalationLevel {
-  if (record.risk_status === "NPL")
-    return "Level 3: Senior Management Escalation";
-  if ((record.risk_flags || []).includes("High Exposure"))
-    return "Level 3: Senior Management Escalation";
-  if (record.risk_status === "Red")
-    return "Level 2: Credit Manager Review";
-  return "Level 1: Officer Follow-up";
+  return getDefaultEscalationLevel(record) as EscalationLevel;
 }
 
 function isOverdue(action: ActionItem): boolean {
-  if (!action.due_date || action.status === "Closed") return false;
-  return new Date(`${action.due_date}T23:59:59`).getTime() < Date.now();
+  return isActionOverdue(action);
 }
 
 function isBoardVisible(action: ActionItem, record?: LoanRecord): boolean {
@@ -180,6 +175,7 @@ function normalizeAction(
     "In Progress": "In Progress",
     Completed: "Closed",
     Escalated: "Escalated",
+    Overdue: "Assigned",
   };
 
   return {
@@ -203,25 +199,32 @@ function normalizeAction(
 }
 
 function createActions(records: LoanRecord[]): ActionItem[] {
+  const baseDate = new Date();
+
   return records
-    .filter((record) => record.risk_status !== "Green")
-    .map((record, index) => ({
-      action_id: `ACT-${String(index + 1).padStart(4, "0")}`,
-      loan_account: record.loan_account,
-      member_name: record.member_name,
-      risk_status: record.risk_status,
-      risk_source: getRiskSource(record),
-      action_required: getDefaultAction(record),
-      assigned_to: record.responsible_officer || "",
-      due_date: "",
-      status: record.responsible_officer ? "Assigned" : "New",
-      escalation_level: getEscalation(record),
-      board_visible:
-        record.risk_status === "NPL" ||
-        (record.risk_flags || []).includes("High Exposure"),
-      notes: "",
-      last_updated: new Date().toISOString(),
-    }));
+    .filter((record) => isWatchlistStatus(record.risk_status))
+    .map((record, index) => {
+      const escalation = getEscalation(record);
+
+      return {
+        action_id: `ACT-${String(index + 1).padStart(4, "0")}`,
+        loan_account: record.loan_account,
+        member_name: record.member_name,
+        risk_status: record.risk_status,
+        risk_source: getRiskSource(record),
+        action_required: getDefaultAction(record),
+        assigned_to: record.responsible_officer || "",
+        due_date: getInitialActionDueDate(record, baseDate),
+        status: record.responsible_officer ? "Assigned" : "New",
+        escalation_level: escalation,
+        board_visible:
+          record.risk_status === "NPL" ||
+          (record.risk_flags || []).includes("High Exposure") ||
+          escalation === "Level 4: Board Visibility",
+        notes: "Automatically created from the current portfolio risk position.",
+        last_updated: new Date().toISOString(),
+      };
+    });
 }
 
 function hasUsableActions(value: unknown): value is Array<Partial<ActionItem> & { loan_account: string; member_name: string }> {
@@ -407,11 +410,33 @@ export default function ActionTrackerPage() {
     setMessage("Execution Tracker updated and recorded in Audit History.");
   }
 
-  function resetActionsFromPortfolio() {
-    const nextActions = createActions(records);
+  function syncActionsFromPortfolio() {
+    const generatedActions = createActions(records);
+    const existingLoanAccounts = new Set(
+      actions.map((action) => action.loan_account)
+    );
+
+    const highestSequence = actions.reduce((highest, action) => {
+      const match = /^ACT-(\d+)$/.exec(String(action.action_id || ""));
+      return match ? Math.max(highest, Number(match[1])) : highest;
+    }, 0);
+
+    let nextSequence = highestSequence + 1;
+    const additions = generatedActions
+      .filter((action) => !existingLoanAccounts.has(action.loan_account))
+      .map((action) => ({
+        ...action,
+        action_id: `ACT-${String(nextSequence++).padStart(4, "0")}`,
+      }));
+
+    const nextActions = [...actions, ...additions];
     setActions(nextActions);
     localStorage.setItem("kiprod_action_items", JSON.stringify(nextActions));
-    setMessage("Execution register regenerated from the latest portfolio.");
+    setMessage(
+      additions.length > 0
+        ? `${additions.length} new risk action${additions.length === 1 ? "" : "s"} added. ${actions.length} existing action${actions.length === 1 ? "" : "s"} preserved.`
+        : `No new risk actions were required. All ${actions.length} existing actions were preserved.`
+    );
   }
 
   const cards = [
@@ -446,10 +471,10 @@ export default function ActionTrackerPage() {
             </p>
           </div>
           <button
-            onClick={resetActionsFromPortfolio}
+            onClick={syncActionsFromPortfolio}
             className="rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white"
           >
-            Regenerate from Portfolio
+            Sync New Risk Accounts
           </button>
         </div>
 

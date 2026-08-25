@@ -2,6 +2,13 @@
 
 import { useState } from "react";
 import * as XLSX from "xlsx";
+import {
+  classifyRisk,
+  getActionDueDays,
+  getDefaultEscalationLevel,
+  getHighExposureLoanAccounts,
+  isWatchlistStatus,
+} from "@/lib/riskPolicy";
 
 type RiskStatus = "Green" | "Amber" | "Red" | "NPL";
 
@@ -85,10 +92,7 @@ John Mwangi,M004,LN004,Development Loan,Nakuru,XYZ Factory,Manufacturing,800000,
 Samuel Kiptoo,M005,LN005,Salary Loan,Mombasa,Port Services,Logistics,450000,300000,5000,7,In Arrears,Faith Njeri,No`;
 
 function getRiskStatus(days: number): RiskStatus {
-  if (days === 0) return "Green";
-  if (days <= 30) return "Amber";
-  if (days <= 90) return "Red";
-  return "NPL";
+  return classifyRisk(days);
 }
 
 function parseCsvRows(csvText: string) {
@@ -149,8 +153,20 @@ function validateRows(headers: string[], rows: Record<string, string>[]) {
 
     numericColumns.forEach((column) => {
       const value = Number(row[column]);
+
       if (row[column] === "" || Number.isNaN(value)) {
         errors.push(`Row ${rowNumber}: ${column} must be numeric.`);
+        return;
+      }
+
+      if (value < 0) {
+        errors.push(`Row ${rowNumber}: ${column} cannot be negative.`);
+      }
+
+      if (column === "days_in_arrears" && !Number.isInteger(value)) {
+        errors.push(
+          `Row ${rowNumber}: days_in_arrears must be a whole number of days.`
+        );
       }
     });
 
@@ -200,13 +216,7 @@ function buildLoanRecords(rows: Record<string, string>[]): LoanRecord[] {
     };
   });
 
-  const highExposureAccounts = new Set(
-    [...records]
-      .filter((record) => record.risk_status !== "Green")
-      .sort((a, b) => b.outstanding_balance - a.outstanding_balance)
-      .slice(0, Math.min(10, records.length))
-      .map((record) => record.loan_account)
-  );
+  const highExposureAccounts = getHighExposureLoanAccounts(records);
 
   return records.map((record) => ({
     ...record,
@@ -236,7 +246,7 @@ function buildInitialActions(records: LoanRecord[]): ActionItem[] {
       const isRed = record.risk_status === "Red";
       const isHighExposure =
         record.risk_flags?.includes("High Exposure") ?? false;
-      const dueInDays = isNpl ? 0 : isRed || isHighExposure ? 3 : 7;
+      const dueInDays = getActionDueDays(record);
 
       return {
         action_id: `ACT-${String(index + 1).padStart(4, "0")}`,
@@ -256,12 +266,7 @@ function buildInitialActions(records: LoanRecord[]): ActionItem[] {
         assigned_to: record.responsible_officer || "",
         due_date: addDays(today, dueInDays),
         status: record.responsible_officer ? "Assigned" : "New",
-        escalation_level:
-          isNpl || isHighExposure
-            ? "Level 3: Senior Management Escalation"
-            : isRed
-              ? "Level 2: Credit Manager Review"
-              : "Level 1: Officer Follow-up",
+        escalation_level: getDefaultEscalationLevel(record),
         board_visible: isNpl || isHighExposure,
         notes: "Automatically created from the latest portfolio upload.",
         last_updated: new Date().toISOString(),
@@ -454,7 +459,7 @@ export default function PortfolioUploadPage() {
       (record) => record.risk_status === "NPL"
     ).length;
     const watchlistCount = records.filter((record) =>
-      ["Amber", "Red", "NPL"].includes(record.risk_status)
+      isWatchlistStatus(record.risk_status)
     ).length;
     const greenCount = records.filter(
       (record) => record.risk_status === "Green"

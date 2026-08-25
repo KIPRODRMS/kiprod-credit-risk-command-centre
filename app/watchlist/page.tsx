@@ -3,6 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import Pagination from "../components/Pagination";
 import RegisterSearch from "../components/RegisterSearch";
+import {
+  getDefaultEscalationLevel,
+  getHighExposureLoanAccounts,
+  isActionOverdue,
+  isWatchlistStatus,
+} from "@/lib/riskPolicy";
 
 type RiskStatus = "Green" | "Amber" | "Red" | "NPL";
 type WatchlistFilter =
@@ -76,13 +82,7 @@ function isHighExposure(record: LoanRecord) {
 }
 
 function applyHighExposureRule(records: LoanRecord[]) {
-  const topAccounts = new Set(
-    records
-      .filter((record) => record.risk_status !== "Green")
-      .sort((a, b) => b.outstanding_balance - a.outstanding_balance)
-      .slice(0, 10)
-      .map((record) => record.loan_account)
-  );
+  const topAccounts = getHighExposureLoanAccounts(records);
 
   return records.map((record) => ({
     ...record,
@@ -112,30 +112,18 @@ function watchlistReason(record: LoanRecord) {
 }
 
 function escalationLevel(record: LoanRecord) {
-  if (record.risk_status === "NPL" && isHighExposure(record)) {
-    return "Level 4: Board Visibility";
-  }
-  if (record.risk_status === "NPL" || isHighExposure(record)) {
-    return "Level 3: Senior Management Escalation";
-  }
-  if (record.risk_status === "Red" || isRestructured(record)) {
-    return "Level 2: Credit Manager Review";
-  }
-  return "Level 1: Officer Follow-up";
+  return getDefaultEscalationLevel(record);
 }
 
 function operationalStatus(action?: ActionItem) {
-  if (action?.status === "Completed" || action?.status === "Closed") return "Closed";
-  if (action?.status === "Escalated") return "Escalated";
-  if (action?.status === "In Progress") return "Under Review";
-  return "New";
+  const status = String(action?.status || "New");
+  if (["Completed", "Done", "Closed"].includes(status)) return "Closed";
+  if (status === "Overdue") return action?.assigned_to ? "Assigned" : "New";
+  return status;
 }
 
 function isOverdue(action?: ActionItem) {
-  if (!action?.due_date || ["Completed", "Closed"].includes(action.status || "")) return false;
-
-  const dueDate = new Date(`${action.due_date}T23:59:59`);
-  return !Number.isNaN(dueDate.getTime()) && dueDate.getTime() < Date.now();
+  return isActionOverdue(action);
 }
 
 export default function WatchlistPage() {
@@ -176,14 +164,7 @@ export default function WatchlistPage() {
     );
 
     return records
-      .filter(
-        (record) =>
-          record.risk_status === "Amber" ||
-          record.risk_status === "Red" ||
-          record.risk_status === "NPL" ||
-          isRestructured(record) ||
-          isHighExposure(record)
-      )
+      .filter((record) => isWatchlistStatus(record.risk_status))
       .map((record) => {
         const action = actionsByAccount.get(record.loan_account);
 
@@ -389,7 +370,7 @@ export default function WatchlistPage() {
                   </p>
                 </div>
                 <p className="text-sm font-medium text-slate-800">
-                  Statuses: New · Under Review · Contacted · Intervention Agreed
+                  Statuses: New · Assigned · In Progress · Awaiting Borrower Response · Intervention Agreed
                   · Escalated · Moved to Recovery · Closed
                 </p>
               </div>

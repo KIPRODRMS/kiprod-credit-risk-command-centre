@@ -14,6 +14,16 @@ import {
   type InstitutionProfile,
   type MasterProfileSource,
 } from "@/lib/institutionMaster";
+import { supabase } from "@/lib/supabaseClient";
+import {
+  isActionOverdue,
+  isClosedActionStatus,
+  isPar30,
+  isPar90,
+  isWatchlistStatus,
+  PAR30_DESCRIPTION,
+  PAR90_DESCRIPTION,
+} from "@/lib/riskPolicy";
 
 type RiskStatus = "Green" | "Amber" | "Red" | "NPL";
 type LoanRecord = {
@@ -58,14 +68,11 @@ function readStored<T>(key: string, fallback: T): T {
 }
 
 function isClosed(action: ActionItem) {
-  return ["closed", "completed", "done"].includes(
-    String(action.status || "").toLowerCase()
-  );
+  return isClosedActionStatus(action.status);
 }
 
 function isOverdue(action: ActionItem) {
-  if (!action.due_date || isClosed(action)) return false;
-  return new Date(`${action.due_date}T23:59:59`).getTime() < Date.now();
+  return isActionOverdue(action);
 }
 
 function formatMoney(value: number, currency: string) {
@@ -132,6 +139,27 @@ export default function BoardPackPage() {
       setActions(storedActions);
       setClarifications(storedClarifications);
     });
+
+    const institutionId =
+      process.env.NEXT_PUBLIC_DEFAULT_INSTITUTION_ID || "";
+
+    if (institutionId) {
+      supabase
+        .from("clarification_requests")
+        .select("status")
+        .eq("institution_id", institutionId)
+        .order("created_at", { ascending: false })
+        .then(({ data, error }) => {
+          if (cancelled || error) return;
+          const latest = (data || []) as ClarificationRequest[];
+          setClarifications(latest);
+          localStorage.setItem(
+            "kiprodClarificationRequests",
+            JSON.stringify(latest)
+          );
+        });
+    }
+
     loadMasterInstitutionProfile().then(async (result) => {
       if (cancelled) return;
       setMasterProfile(result.profile);
@@ -184,11 +212,11 @@ export default function BoardPackPage() {
     const byRisk = (risk: RiskStatus) =>
       records.filter((row) => row.risk_status === risk);
     const npl = byRisk("NPL");
-    const par30 = records.filter((row) => Number(row.days_in_arrears || 0) > 30);
-    const par90 = records.filter((row) => Number(row.days_in_arrears || 0) > 90);
+    const par30 = records.filter((row) => isPar30(row.days_in_arrears));
+    const par90 = records.filter((row) => isPar90(row.days_in_arrears));
     // Official Command Centre definition: Watchlist = Amber + Red + NPL.
     const watchlist = records.filter((row) =>
-      ["Amber", "Red", "NPL"].includes(row.risk_status)
+      isWatchlistStatus(row.risk_status)
     );
     const openActions = actions.filter((action) => !isClosed(action));
     const overdueActions = actions.filter(isOverdue);
@@ -725,8 +753,8 @@ export default function BoardPackPage() {
           ["Amber Accounts", report.amber.length],
           ["Red Accounts", report.red.length],
           ["NPL Accounts", report.npl.length],
-          ["Portfolio at Risk", formatMoney(report.arrears, currency)],
-          ["Portfolio at Risk Ratio", `${report.outstanding ? ((report.arrears / report.outstanding) * 100).toFixed(1) : "0.0"}%`],
+          ["Total Arrears", formatMoney(report.arrears, currency)],
+          ["Arrears to Outstanding Ratio", `${report.outstanding ? ((report.arrears / report.outstanding) * 100).toFixed(1) : "0.0"}%`],
         ]),
       });
 
@@ -757,7 +785,7 @@ export default function BoardPackPage() {
           formatMoney(report.par90Value, currency),
         ]],
       });
-      paragraph("PAR 30 includes exposures at 30 days past due or more. PAR 90 includes exposures at 90 days past due or more.");
+      paragraph(`PAR 30 includes outstanding exposures ${PAR30_DESCRIPTION}. PAR 90 includes outstanding exposures ${PAR90_DESCRIPTION}.`);
 
       sectionTitle("6. Key Risk Concentrations");
       table({
@@ -790,7 +818,7 @@ export default function BoardPackPage() {
         styles: { halign: "center", fontSize: 8, cellPadding: 2.2 },
       });
       paragraph(
-        "Overdue actions count only actions whose due date is before today and whose status is not Closed. Open actions are not treated as overdue by default."
+        `${report.openActions.length} actions are currently open. ${report.overdueActions.length} of those open actions are past their due date. Overdue is derived from due date and closure status; an open action is not automatically overdue.`
       );
 
       sectionTitle("8. Matters Requiring Board Attention");
@@ -1164,9 +1192,9 @@ export default function BoardPackPage() {
                   {metric("Amber Accounts", report.amber.length, "text-amber-700")}
                   {metric("Red Accounts", report.red.length, "text-red-600")}
                   {metric("NPL Accounts", report.npl.length, "text-red-700")}
-                  {metric("Portfolio at Risk", formatMoney(report.arrears, currency))}
+                  {metric("Total Arrears", formatMoney(report.arrears, currency))}
                   {metric(
-                    "Portfolio at Risk Ratio",
+                    "Arrears to Outstanding Ratio",
                     `${report.outstanding ? ((report.arrears / report.outstanding) * 100).toFixed(1) : "0.0"}%`
                   )}
                 </div>
@@ -1192,7 +1220,7 @@ export default function BoardPackPage() {
                 {metric("PAR 90 Position", formatMoney(report.par90Value, currency))}
               </div>
               <p className="mt-4 text-sm font-semibold text-slate-600">
-                PAR 30 includes exposures at 30 days past due or more. PAR 90 includes exposures at 90 days past due or more.
+                PAR 30 includes outstanding exposures {PAR30_DESCRIPTION}. PAR 90 includes outstanding exposures {PAR90_DESCRIPTION}.
               </p>
               <p className="mt-2 text-sm text-slate-500">
                 Month-on-month NPL movement will activate once historical reporting-period data is available.
@@ -1226,7 +1254,11 @@ export default function BoardPackPage() {
                 {metric("Due This Week", report.dueThisWeek.length)}
               </div>
               <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold leading-5 text-slate-700">
-                <strong>Overdue definition:</strong> due date is before today and status is not Closed. Open actions are not overdue by default.
+                <strong>Action status interpretation:</strong>{" "}
+                {report.openActions.length} actions are currently open;{" "}
+                {report.overdueActions.length} of them are past their due date.
+                Overdue is derived from due date and closure status. An open
+                action is not automatically overdue.
               </p>
             </section>
 

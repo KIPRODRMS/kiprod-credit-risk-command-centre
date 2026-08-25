@@ -65,3 +65,16 @@ Executive Cockpit, Portfolio Health, Early Warning, Watchlist, Execution Tracker
 Before changing any risk calculation, first verify its effect across every dependent module.
 
 No risk formula change may be made merely to make a displayed number appear more intuitive.
+
+## Locked Interpretation Rules
+
+- User-facing PAR30 wording must say **more than 30 days past due (31+ DPD)**.
+- User-facing PAR90 wording must say **more than 90 days past due (91+ DPD)**.
+- Never describe the locked PAR thresholds as "30 days or more", "30+ DPD", "90 days or more", or "90+ DPD".
+- **Overdue is a derived condition**, calculated from due date plus closure status. It is not a manually selectable action status.
+- **Open and overdue are different measures.** An open action is unresolved; it becomes overdue only after its due date passes.
+- **Board-visible risks are unique governance matters**, not the arithmetic sum of trigger counters. NPL, overdue, high exposure, clarification, deterioration and ownership triggers can overlap on the same account.
+- Restructured and High Exposure are **risk overlays inside the Watchlist**. They must not add Green accounts to the Watchlist.
+- High Exposure means the top 10 outstanding exposures **within the current Watchlist**, unless KIPROD explicitly approves a different policy.
+- A destructive "regenerate actions" operation is prohibited. Portfolio/action synchronization may add genuinely new risk actions but must preserve existing accountability records.
+- "Portfolio at Risk" must not be used as a label for raw arrears. Use **Total Arrears** and **Arrears to Outstanding Ratio** for arrears measures; reserve PAR terminology for the approved DPD exposure thresholds.

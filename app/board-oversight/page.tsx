@@ -3,6 +3,12 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import {
+  getHighExposureLoanAccounts,
+  isActionOverdue,
+  isClosedActionStatus,
+  isWatchlistStatus,
+} from "@/lib/riskPolicy";
 
 type RiskStatus = "Green" | "Amber" | "Red" | "NPL";
 
@@ -83,20 +89,16 @@ type BoardNote = {
   updatedAt: string;
 };
 
-const CLOSED_STATUSES = ["closed", "completed", "done"];
-
 function subscribeToHydration() {
   return () => {};
 }
 
 function isClosed(action: ActionItem) {
-  return CLOSED_STATUSES.includes(String(action.status || "").toLowerCase());
+  return isClosedActionStatus(action.status);
 }
 
 function isOverdue(action: ActionItem) {
-  if (!action.due_date || isClosed(action)) return false;
-  const due = new Date(`${action.due_date}T23:59:59`);
-  return !Number.isNaN(due.getTime()) && due.getTime() < Date.now();
+  return isActionOverdue(action);
 }
 
 function daysOverdue(dateValue: string) {
@@ -223,8 +225,9 @@ export default function BoardOversightPage() {
       "kiprodClarificationRequests",
       []
     );
+
     if (storedClarifications.length > 0) {
-      return;
+      setClarifications(storedClarifications);
     }
 
     const institutionId =
@@ -253,18 +256,16 @@ export default function BoardOversightPage() {
       records.map((record) => [record.loan_account, record])
     );
     const watchlist = records.filter((record) =>
-      ["Amber", "Red", "NPL"].includes(record.risk_status)
+      isWatchlistStatus(record.risk_status)
     );
+    const highExposureLoans = getHighExposureLoanAccounts(watchlist);
     const highExposureRecords = [...watchlist]
+      .filter((record) => highExposureLoans.has(record.loan_account))
       .sort(
         (a, b) =>
           Number(b.outstanding_balance || 0) -
           Number(a.outstanding_balance || 0)
-      )
-      .slice(0, Math.min(10, watchlist.length));
-    const highExposureLoans = new Set(
-      highExposureRecords.map((record) => record.loan_account)
-    );
+      );
 
     const openClarifications = clarifications.filter(isClarificationOpen);
 
@@ -573,13 +574,16 @@ export default function BoardOversightPage() {
           <Metric label="Unresolved Clarifications" value={analysis.unresolvedClarifications} note="Every status except Closed" tone="blue" />
           <Metric label="High Exposure Accounts" value={analysis.highExposure} note="Top 10 watchlist exposures" tone="amber" />
           <Metric label="Repeated Deterioration" value={analysis.deterioration} note="Repeated-risk flags identified" tone="amber" />
-          <Metric label="Last Report Generated" value={lastReport} note="Formal Board Report reference" tone="slate" />
+          <Metric label="Reporting Period" value={lastReport} note="Current Board Report period" tone="slate" />
         </section>
 
         <p className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-950">
           Summary figures use the same complete Command Centre action,
           portfolio, and clarification records as the Board Report. The
           detailed register below is the Board-visible governance subset.
+          Board-visible risks are unique matters; trigger counters such as NPL,
+          overdue, high exposure and clarification can overlap and must not be
+          added together.
         </p>
 
         <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 text-slate-950 shadow-sm">

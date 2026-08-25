@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Pagination from "../components/Pagination";
+import { isPar30, isPar90 } from "@/lib/riskPolicy";
 
 type LoanRecord = {
   member_name: string;
@@ -73,12 +74,12 @@ export default function DashboardPage() {
       (record) => record.risk_status === "NPL"
     ).length;
 
-    const par30 = records.filter(
-      (record) => Number(record.days_in_arrears || 0) > 30
+    const par30 = records.filter((record) =>
+      isPar30(record.days_in_arrears)
     ).length;
 
-    const par90 = records.filter(
-      (record) => Number(record.days_in_arrears || 0) > 90
+    const par90 = records.filter((record) =>
+      isPar90(record.days_in_arrears)
     ).length;
 
     return {

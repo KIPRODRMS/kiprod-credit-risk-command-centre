@@ -23,6 +23,13 @@ const navItems = [
   { label: "Execution Tracker", href: "/action-tracker" },
   { label: "Board Report", href: "/board-pack" },
   { label: "Board Oversight", href: "/board-oversight" },
+  { label: "Board Portal", href: "/board-portal" },
+  { label: "Management Portal", href: "/management-portal" },
+  { label: "CEO Portal", href: "/ceo-portal" },
+  { label: "Risk Manager Portal", href: "/risk-manager-portal" },
+  { label: "Credit Manager Portal", href: "/credit-manager-portal" },
+  { label: "Recovery Manager Portal", href: "/recovery-manager-portal" },
+  { label: "Portfolio/Loans Manager Portal", href: "/portfolio-manager-portal" },
   { label: "Clarification Requests", href: "/clarification-requests" },
   { label: "Audit History", href: "/audit-history" },
   { label: "Role Access", href: "/role-access" },
@@ -30,6 +37,13 @@ const navItems = [
 
 export default function MainNav() {
   const pathname = usePathname();
+  const isDedicatedPortal =
+    pathname.startsWith("/board-portal") ||
+    pathname.startsWith("/ceo-portal") ||
+    pathname.startsWith("/risk-manager-portal") ||
+    pathname.startsWith("/credit-manager-portal") ||
+    pathname.startsWith("/recovery-manager-portal") ||
+    pathname.startsWith("/portfolio-manager-portal");
   const [open, setOpen] = useState(false);
   const [profile, setProfile] = useState<InstitutionProfile>(defaultInstitutionProfile);
   const [profileSource, setProfileSource] = useState<MasterProfileSource | "loading">("loading");
@@ -73,6 +87,8 @@ export default function MainNav() {
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [open]);
+
+  if (isDedicatedPortal) return null;
 
   const institutionName = profile.institutionName || "Institution Profile pending";
   const institutionInitial = profile.institutionName.trim().charAt(0).toUpperCase() || "K";

@@ -1,0 +1,7 @@
+export const MANAGEMENT_ROLES = ["CEO", "Risk Manager", "Credit Manager", "Portfolio/Loans Manager", "Recovery Manager"] as const;
+export type PortalClarification = { id:string; institution_id:string; request_title:string; loan_account:string|null; member_name:string|null; issue_type:string|null; question:string; requested_by_role:string|null; assigned_to:string|null; status:string; management_response:string|null; board_review_notes:string|null; created_at:string; responded_at:string|null; reviewed_at:string|null };
+export function currentPortalRole(){ if(typeof window==="undefined") return "MVP User"; return localStorage.getItem("kiprodCurrentRole")||"MVP User"; }
+export function roleMatchesAssignment(role:string, assignment:string|null){ const selected=role.trim().toLowerCase(); const target=String(assignment||"Management").trim().toLowerCase(); if(selected.includes("admin")||selected.includes("mvp")||selected.includes("ceo")) return true; if(target==="management"||target==="management team") return true; return target.includes(selected)||selected.includes(target); }
+export const isManagementPending=(status:string)=>status==="Pending Management Response"||status==="Further Clarification Required";
+export const isBoardPending=(status:string)=>status==="Management Responded"||status==="Under Board Review";
+export function cachePortalClarifications(rows:PortalClarification[]){ if(typeof window!=="undefined") localStorage.setItem("kiprodClarificationRequests",JSON.stringify(rows)); }
