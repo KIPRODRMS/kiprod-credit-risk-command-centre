@@ -12,28 +12,35 @@ import {
   type MasterProfileSource,
 } from "@/lib/institutionMaster";
 
-const navItems = [
-  { label: "Home", href: "/" },
-  { label: "Credit Risk Dashboard", href: "/dashboard" },
-  { label: "Institution Profile", href: "/institution-profile" },
-  { label: "Executive Cockpit", href: "/executive-dashboard" },
-  { label: "Portfolio Upload", href: "/portfolio-upload" },
-  { label: "Early Warning", href: "/early-warning" },
-  { label: "Watchlist", href: "/watchlist" },
-  { label: "Execution Tracker", href: "/action-tracker" },
-  { label: "Board Report", href: "/board-pack" },
-  { label: "Board Oversight", href: "/board-oversight" },
-  { label: "Board Portal", href: "/board-portal" },
-  { label: "Management Portal", href: "/management-portal" },
-  { label: "CEO Portal", href: "/ceo-portal" },
-  { label: "Risk Manager Portal", href: "/risk-manager-portal" },
-  { label: "Credit Manager Portal", href: "/credit-manager-portal" },
-  { label: "Recovery Manager Portal", href: "/recovery-manager-portal" },
-  { label: "Portfolio/Loans Manager Portal", href: "/portfolio-manager-portal" },
-  { label: "Clarification Requests", href: "/clarification-requests" },
-  { label: "Audit History", href: "/audit-history" },
-  { label: "Role Access", href: "/role-access" },
+const navSections = [
+  {
+    label: "Core intelligence",
+    items: [
+      { label: "Command Centre Home", href: "/" },
+      { label: "Executive Cockpit", href: "/executive-dashboard" },
+      { label: "Credit Risk Dashboard", href: "/dashboard" },
+    ],
+  },
+  {
+    label: "Role workspaces",
+    items: [
+      { label: "Board Portal", href: "/board-portal" },
+      { label: "CEO Portal", href: "/ceo-portal" },
+      { label: "Management Portal", href: "/management-portal" },
+      { label: "System Administrator", href: "/admin-portal" },
+    ],
+  },
+  {
+    label: "System and evidence",
+    items: [
+      { label: "Institution Profile", href: "/institution-profile" },
+      { label: "Portfolio Upload", href: "/portfolio-upload" },
+      { label: "Audit History", href: "/audit-history" },
+    ],
+  },
 ];
+
+const navItems = navSections.flatMap((section) => section.items);
 
 export default function MainNav() {
   const pathname = usePathname();
@@ -43,7 +50,8 @@ export default function MainNav() {
     pathname.startsWith("/risk-manager-portal") ||
     pathname.startsWith("/credit-manager-portal") ||
     pathname.startsWith("/recovery-manager-portal") ||
-    pathname.startsWith("/portfolio-manager-portal");
+    pathname.startsWith("/portfolio-manager-portal") ||
+    pathname.startsWith("/admin-portal");
   const [open, setOpen] = useState(false);
   const [profile, setProfile] = useState<InstitutionProfile>(defaultInstitutionProfile);
   const [profileSource, setProfileSource] = useState<MasterProfileSource | "loading">("loading");
@@ -240,27 +248,36 @@ export default function MainNav() {
           </div>
         </div>
 
-        <nav className="grid flex-1 grid-cols-1 gap-2 overflow-y-auto p-4" aria-label="Menu links">
-          {navItems.map((item, index) => {
-            const active = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setOpen(false)}
-                tabIndex={open ? 0 : -1}
-                aria-current={active ? "page" : undefined}
-                style={{ "--nav-order": index } as React.CSSProperties}
-                className={`nav-drawer-link rounded-xl border px-4 py-3 text-sm font-bold transition ${
-                  active
-                    ? "border-[#e1b85f] bg-[#d6a84f] text-[#071426] shadow-md shadow-black/20"
-                    : "border-white/10 bg-white/5 text-slate-100 hover:border-[#d6a84f]/45 hover:bg-white/10"
-                }`}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
+        <nav className="flex flex-1 flex-col gap-5 overflow-y-auto p-4" aria-label="Menu links">
+          {navSections.map((section, sectionIndex) => (
+            <section key={section.label} aria-label={section.label}>
+              <p className="mb-2 px-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#e1b85f]">
+                {section.label}
+              </p>
+              <div className="grid gap-2">
+                {section.items.map((item, itemIndex) => {
+                  const active = pathname === item.href;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setOpen(false)}
+                      tabIndex={open ? 0 : -1}
+                      aria-current={active ? "page" : undefined}
+                      style={{ "--nav-order": sectionIndex * 10 + itemIndex } as React.CSSProperties}
+                      className={`nav-drawer-link rounded-xl border px-4 py-3 text-sm font-bold transition ${
+                        active
+                          ? "border-[#e1b85f] bg-[#d6a84f] text-[#071426] shadow-md shadow-black/20"
+                          : "border-white/10 bg-white/5 text-slate-100 hover:border-[#d6a84f]/45 hover:bg-white/10"
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
         </nav>
 
         <p className="border-t border-slate-800 px-5 py-4 text-xs leading-5 text-slate-400">

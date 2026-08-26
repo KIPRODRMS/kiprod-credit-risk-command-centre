@@ -26,6 +26,37 @@ const pathway = [
   ["05", "Audit evidence", "A preserved institutional trail"],
 ];
 
+const workspaces = [
+  {
+    icon: "oversight" as IconName,
+    eyebrow: "Governance workspace",
+    title: "Board Portal",
+    text: "Board oversight, reports, clarifications, management responses and Board decisions.",
+    href: "/board-portal",
+  },
+  {
+    icon: "cockpit" as IconName,
+    eyebrow: "Leadership workspace",
+    title: "CEO Portal",
+    text: "Institution-wide performance, accountability, escalation and direct Executive Cockpit access.",
+    href: "/ceo-portal",
+  },
+  {
+    icon: "action" as IconName,
+    eyebrow: "Operational workspace",
+    title: "Management Portal",
+    text: "Role-routed actions, Watchlist matters and Board clarification tasks for accountable managers.",
+    href: "/management-portal",
+  },
+  {
+    icon: "institution" as IconName,
+    eyebrow: "Controlled administration",
+    title: "System Administration",
+    text: "Institution setup, user roles, portal routing, access governance and system evidence.",
+    href: "/admin-portal",
+  },
+];
+
 const modules: Array<{
   icon: IconName;
   eyebrow: string;
@@ -184,10 +215,30 @@ export default function Home() {
       <section className="premium-light-section premium-pathway-section">
         <div className="premium-section-heading">
           <div>
-            <p className="premium-section-kicker">The institutional journey</p>
-            <h2>Risk intelligence that leads to action.</h2>
+            <p className="premium-section-kicker">Official Command Centre home</p>
+            <h2>One platform. The right workspace for every role.</h2>
           </div>
-          <p>One connected governance pathway from raw portfolio information to executive decisions, Board oversight and reliable audit evidence.</p>
+          <p>This is the institutional landing page. After secure login, each user will be routed directly to the workspace approved for their role.</p>
+        </div>
+        <div className="relative z-10 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {workspaces.map((workspace) => (
+            <Link
+              key={workspace.title}
+              href={workspace.href}
+              className="group flex min-h-64 flex-col rounded-3xl border border-slate-200 bg-white p-6 text-slate-950 shadow-sm transition hover:-translate-y-1 hover:border-[#d6a84f] hover:shadow-xl"
+            >
+              <span className="premium-module-icon"><ModuleIcon name={workspace.icon} /></span>
+              <small className="mt-auto text-[10px] font-black uppercase tracking-[0.16em] text-[#9b712d]">{workspace.eyebrow}</small>
+              <strong className="mt-2 text-xl text-slate-950">{workspace.title}</strong>
+              <span className="mt-3 text-sm leading-6 text-slate-600">{workspace.text}</span>
+              <span className="mt-5 text-xs font-black uppercase tracking-[0.12em] text-[#9b712d]">Enter workspace →</span>
+            </Link>
+          ))}
+        </div>
+        <div className="relative z-10 mb-8 mt-16 max-w-2xl">
+          <p className="premium-section-kicker">The institutional journey</p>
+          <h3 className="mt-3 text-3xl font-black text-[#071426]">Risk intelligence that leads to action.</h3>
+          <p className="mt-3 text-sm leading-6 text-slate-600">Every workspace remains connected to one governance pathway from portfolio information to executive decisions, Board oversight and reliable audit evidence.</p>
         </div>
         <div className="premium-pathway">
           {pathway.map(([number, title, text]) => (
