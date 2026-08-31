@@ -84,3 +84,10 @@ for insert to authenticated with check (public.kiprod_is_platform_admin());
 drop policy if exists "KIPROD institutions update" on public.institutions;
 create policy "KIPROD institutions update" on public.institutions
 for update to authenticated
+using (public.kiprod_is_platform_admin())
+with check (public.kiprod_is_platform_admin());
+
+grant select, insert, update on public.institutions to authenticated;
+notify pgrst, 'reload schema';
+
+commit;
