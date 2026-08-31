@@ -4,6 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { logout } from "@/app/login/actions";
+import { isRouteAllowed, roleNavigation, ROLE_HOME, type PortalRole } from "@/lib/accessControl";
 import {
   defaultInstitutionProfile,
   INSTITUTION_PROFILE_UPDATED_EVENT,
@@ -12,38 +14,10 @@ import {
   type MasterProfileSource,
 } from "@/lib/institutionMaster";
 
-const navSections = [
-  {
-    label: "Core intelligence",
-    items: [
-      { label: "Command Centre Home", href: "/" },
-      { label: "Executive Cockpit", href: "/executive-dashboard" },
-      { label: "Credit Risk Dashboard", href: "/dashboard" },
-    ],
-  },
-  {
-    label: "Role workspaces",
-    items: [
-      { label: "Board Portal", href: "/board-portal" },
-      { label: "CEO Portal", href: "/ceo-portal" },
-      { label: "Management Portal", href: "/management-portal" },
-      { label: "System Administrator", href: "/admin-portal" },
-    ],
-  },
-  {
-    label: "System and evidence",
-    items: [
-      { label: "Institution Profile", href: "/institution-profile" },
-      { label: "Portfolio Upload", href: "/portfolio-upload" },
-      { label: "Audit History", href: "/audit-history" },
-    ],
-  },
-];
-
-const navItems = navSections.flatMap((section) => section.items);
-
-export default function MainNav() {
+export default function MainNav({ activeRole, executiveCockpitAllowed }: { activeRole: PortalRole | null; executiveCockpitAllowed: boolean }) {
   const pathname = usePathname();
+  const navSections = roleNavigation(activeRole, executiveCockpitAllowed);
+  const navItems = navSections.flatMap((section) => section.items);
   const isDedicatedPortal =
     pathname.startsWith("/board-portal") ||
     pathname.startsWith("/ceo-portal") ||
@@ -51,7 +25,13 @@ export default function MainNav() {
     pathname.startsWith("/credit-manager-portal") ||
     pathname.startsWith("/recovery-manager-portal") ||
     pathname.startsWith("/portfolio-manager-portal") ||
-    pathname.startsWith("/admin-portal");
+    pathname.startsWith("/admin-portal") ||
+    pathname.startsWith("/kiprod-admin") ||
+    pathname === "/login" ||
+    pathname === "/account" ||
+    pathname === "/forgot-password" ||
+    pathname === "/reset-password" ||
+    pathname.startsWith("/auth/callback");
   const [open, setOpen] = useState(false);
   const [profile, setProfile] = useState<InstitutionProfile>(defaultInstitutionProfile);
   const [profileSource, setProfileSource] = useState<MasterProfileSource | "loading">("loading");
@@ -142,7 +122,7 @@ export default function MainNav() {
           </Link>
 
           <Link
-            href="/institution-profile"
+            href={activeRole && isRouteAllowed(activeRole, "/institution-profile") ? "/institution-profile" : activeRole ? ROLE_HOME[activeRole] : "/"}
             className="command-institution-panel group"
             aria-label={`Open master Institution Profile for ${institutionName}`}
           >
@@ -280,9 +260,15 @@ export default function MainNav() {
           ))}
         </nav>
 
-        <p className="border-t border-slate-800 px-5 py-4 text-xs leading-5 text-slate-400">
-          Institutional risk visibility, accountability and Board oversight.
-        </p>
+        <div className="border-t border-slate-800 p-4">
+          <p className="mb-3 text-xs font-black uppercase tracking-[.15em] text-[#e1b85f]">{activeRole || "Account"}</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Link href="/account" onClick={() => setOpen(false)} className="rounded-xl border border-white/15 px-4 py-3 text-center text-xs font-black text-white">My account</Link>
+            <form action={logout}>
+              <button type="submit" className="w-full rounded-xl border border-[#d6a84f]/50 px-4 py-3 text-xs font-black text-[#f3d58f]">Sign out</button>
+            </form>
+          </div>
+        </div>
       </aside>
     </header>
   );

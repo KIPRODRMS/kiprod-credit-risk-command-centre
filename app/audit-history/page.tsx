@@ -8,6 +8,11 @@ import {
 } from "@/lib/institutionMaster";
 import Pagination from "../components/Pagination";
 import RegisterSearch from "../components/RegisterSearch";
+import {
+  assignedRolesFromUser,
+  normaliseRole,
+  type PortalRole,
+} from "@/lib/accessControl";
 
 type AuditLog = {
   id: string;
@@ -187,8 +192,44 @@ function technicalValue(value: string): string {
   return objectValue ? JSON.stringify(objectValue, null, 2) : formatAuditValue(value);
 }
 
+function auditVisibleToRole(role: PortalRole | null, log: AuditLog): boolean {
+  if (!role || role === "KIPROD Admin" || role === "Institution Admin") return true;
+
+  const moduleName = log.module.toLowerCase();
+  const evidence = [
+    log.module,
+    log.actionType,
+    log.recordRef,
+    log.oldValue,
+    log.newValue,
+    log.note,
+  ].join(" ").toLowerCase();
+  const containsAny = (...terms: string[]) => terms.some((term) => evidence.includes(term));
+
+  if (role === "Board Chair" || role === "Board Member" || role === "Board Secretary") {
+    return containsAny("board", "clarification", "escalat", "governance", "report opened", "report downloaded", "closed");
+  }
+  if (role === "CEO") {
+    return containsAny("executive", "board", "clarification", "escalat", "overdue", "management response", "portfolio upload", "report");
+  }
+  if (role === "Risk Manager") {
+    return containsAny("risk", "early warning", "watchlist", "execution", "clarification", "escalat");
+  }
+  if (role === "Credit Manager") {
+    return containsAny("credit", "early warning", "watchlist", "execution", "clarification", "arrears");
+  }
+  if (role === "Portfolio/Loans Manager") {
+    return containsAny("portfolio", "loan", "upload", "execution", "clarification", "watchlist");
+  }
+  if (role === "Recovery Manager") {
+    return containsAny("recovery", "npl", "execution", "clarification", "watchlist");
+  }
+  return moduleName.length > 0;
+}
+
 export default function AuditHistoryPage() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [viewerRole, setViewerRole] = useState<PortalRole | null>(null);
   const [filterModule, setFilterModule] = useState("All");
   const [filterAction, setFilterAction] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
@@ -201,10 +242,29 @@ export default function AuditHistoryPage() {
     setLoading(true);
     const institutionId = getInstitutionId();
     const localLogs = readAuditLogs();
+    const { data: authData } = await supabase.auth.getUser();
+    const { data: profile } = authData.user
+      ? await supabase
+          .from("user_profiles")
+          .select("roles")
+          .eq("user_id", authData.user.id)
+          .maybeSingle()
+      : { data: null };
+    const profileRoles = Array.isArray(profile?.roles)
+      ? profile.roles.map(normaliseRole).filter((role): role is PortalRole => Boolean(role))
+      : [];
+    const assignedRoles = profileRoles.length
+      ? profileRoles
+      : assignedRolesFromUser(authData.user);
+    const simulatedRole = normaliseRole(localStorage.getItem("kiprodCurrentRole"));
+    const currentRole = simulatedRole && assignedRoles.includes(simulatedRole)
+      ? simulatedRole
+      : assignedRoles[0] || null;
+    setViewerRole(currentRole);
 
     if (localLogs.length > 0) setLogs(localLogs);
 
-    if (!institutionId) {
+    if (!institutionId && currentRole !== "KIPROD Admin") {
       setLogs(localLogs);
       setMessage(
         "Database audit history is waiting for NEXT_PUBLIC_DEFAULT_INSTITUTION_ID. Local fallback is active."
@@ -232,13 +292,16 @@ export default function AuditHistoryPage() {
       if (!migrationError) localStorage.removeItem("kiprodAuditLogs");
     }
 
-    const { data, error } = await supabase
+    let auditQuery = supabase
       .from("audit_logs")
       .select(
         "id,created_at,module,action_type,record_ref,old_value,new_value,role,user_name,note"
       )
-      .eq("institution_id", institutionId)
       .order("created_at", { ascending: false });
+    if (currentRole !== "KIPROD Admin") {
+      auditQuery = auditQuery.eq("institution_id", institutionId);
+    }
+    const { data, error } = await auditQuery;
 
     if (error) {
       setLogs(localLogs);
@@ -261,9 +324,9 @@ export default function AuditHistoryPage() {
         note: String(row.note || ""),
       }))
     );
-    setMessage(
-      "Showing the shared, append-only Supabase audit trail for this institution."
-    );
+    setMessage(currentRole === "KIPROD Admin"
+      ? "Showing the platform-wide, append-only support and diagnostic trail."
+      : `Showing the read-only ${currentRole || "role"} audit view for this institution.`);
     setLoading(false);
   }, []);
 
@@ -284,6 +347,7 @@ export default function AuditHistoryPage() {
 
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
+      if (!auditVisibleToRole(viewerRole, log)) return false;
       const moduleMatches =
         filterModule === "All" || log.module === filterModule;
 
@@ -296,7 +360,7 @@ export default function AuditHistoryPage() {
         .some((value) => String(value || "").toLowerCase().includes(query));
       return moduleMatches && actionMatches && searchMatches;
     });
-  }, [logs, filterModule, filterAction, searchQuery]);
+  }, [logs, viewerRole, filterModule, filterAction, searchQuery]);
 
   const auditSummary = useMemo(() => {
     const modulesTracked = new Set(
@@ -323,14 +387,14 @@ export default function AuditHistoryPage() {
   return (
     <main style={styles.page}>
       <section style={styles.header}>
-        <p style={styles.kicker}>Governance & Accountability</p>
+        <p style={styles.kicker}>Read-only governance evidence</p>
 
         <h1 style={styles.title}>Audit History</h1>
 
         <p style={styles.subtitle}>
-          Preserve a record of important changes across the Command Centre,
-          including action updates, officer changes, status movement, board
-          reviews, and clarification requests.
+          {viewerRole || "Your role"} sees the audit evidence relevant to its
+          responsibility. Records can be reviewed and searched, but never edited
+          or deleted from this workspace.
         </p>
 
         <div style={styles.actions}>

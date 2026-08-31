@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { isRouteAllowed, ROLE_HOME } from "@/lib/accessControl";
+import { getServerAccessContext } from "@/lib/accessServer";
 
 type IconName =
   | "institution"
@@ -137,7 +139,26 @@ function ModuleIcon({ name }: { name: IconName }) {
   );
 }
 
-export default function Home() {
+export default async function Home() {
+  const access = await getServerAccessContext();
+  const activeRole = access.activeRole;
+  const workspaceHref = activeRole ? ROLE_HOME[activeRole] : "/account";
+  const visibleWorkspaces = activeRole
+    ? [{
+        icon: (activeRole.startsWith("Board") ? "oversight" : activeRole.includes("Admin") ? "institution" : activeRole === "CEO" ? "cockpit" : "action") as IconName,
+        eyebrow: "Your approved workspace",
+        title: `${activeRole} Portal`,
+        text: "Your role-specific intelligence, tasks, clarifications and accountability workspace.",
+        href: workspaceHref,
+      }]
+    : [];
+  const visibleModules = activeRole ? modules.filter((module) =>
+    module.href === "/executive-dashboard"
+      ? access.executiveCockpitAllowed
+      : isRouteAllowed(activeRole, module.href)
+  ) : [];
+  const canUploadPortfolio = activeRole ? isRouteAllowed(activeRole, "/portfolio-upload") : false;
+
   return (
     <main className="premium-home">
       <section className="premium-hero">
@@ -152,12 +173,12 @@ export default function Home() {
               Convert portfolio data into early-warning intelligence, accountable management action and Board-ready oversight.
             </p>
             <div className="premium-actions">
-              <Link className="premium-button premium-button-primary" href="/executive-dashboard">
-                Open Executive Cockpit <span aria-hidden="true">↗</span>
+              <Link className="premium-button premium-button-primary" href={workspaceHref}>
+                Open my workspace <span aria-hidden="true">↗</span>
               </Link>
-              <Link className="premium-button premium-button-secondary" href="/portfolio-upload">
+              {canUploadPortfolio && <Link className="premium-button premium-button-secondary" href="/portfolio-upload">
                 Upload portfolio data <span aria-hidden="true">→</span>
-              </Link>
+              </Link>}
             </div>
             <div className="premium-trust-line">
               <span>Built for financial institutions</span>
@@ -221,7 +242,7 @@ export default function Home() {
           <p>This is the institutional landing page. After secure login, each user will be routed directly to the workspace approved for their role.</p>
         </div>
         <div className="relative z-10 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {workspaces.map((workspace) => (
+          {visibleWorkspaces.map((workspace) => (
             <Link
               key={workspace.title}
               href={workspace.href}
@@ -259,7 +280,7 @@ export default function Home() {
           <p>Purpose-built workspaces connect risk monitoring, management execution and Board accountability without fragmenting institutional evidence.</p>
         </div>
         <div className="premium-module-grid">
-          {modules.map((module) => (
+          {visibleModules.map((module) => (
             <Link className={`premium-module-card${module.featured ? " premium-module-featured" : ""}`} href={module.href} key={module.title}>
               <span className="premium-module-icon"><ModuleIcon name={module.icon} /></span>
               <span className="premium-module-content">

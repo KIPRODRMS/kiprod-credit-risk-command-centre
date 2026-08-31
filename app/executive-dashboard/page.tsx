@@ -127,8 +127,10 @@ export default function ExecutiveDashboardPage() {
     percent: (metrics.risk[status] / riskTotal) * 100,
   }));
 
+  // Keep the headline signal transparent: it is the share of accounts that
+  // are currently Green. Raw action counts must not collapse the meter to zero.
   const healthScore = dataLoaded
-    ? Math.round(clamp(100 - metrics.par30 * 1.15 - metrics.arrearsRate * 0.45 - metrics.actionsDue * 1.5))
+    ? Math.round(clamp(metrics.performingRate))
     : 0;
   const attentionCount = metrics.risk.Red + metrics.risk.NPL + metrics.actionsDue;
 

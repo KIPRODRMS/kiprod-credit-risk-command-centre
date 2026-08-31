@@ -2636,3 +2636,66 @@ main .grid > [class~="bg-white"] > .text-red-800 {
   line-height: 1.2;
   text-align: center;
 }
+
+/* Authentication surfaces own their foreground. These rules intentionally
+   sit last and outrank generic light-card contracts when a navy panel is
+   nested inside a white authentication shell. */
+.motion-page.route-login main .auth-dark-panel,
+.motion-page.route-login main .auth-dark-panel :is(h1, h2, h3, h4, p, span, strong, small),
+.motion-page.route-account main .auth-account-card,
+.motion-page.route-account main .auth-account-card :is(h1, h2, h3, h4, p, span, strong, small, a, button) {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+.motion-page.route-login main .auth-dark-panel .auth-gold,
+.motion-page.route-account main .auth-account-card .auth-gold {
+  color: #f2c768 !important;
+  -webkit-text-fill-color: #f2c768 !important;
+}
+
+/* KIPROD Admin dark surfaces always use high-contrast executive copy. */
+.motion-page.route-kiprod-admin main > div > header,
+.motion-page.route-kiprod-admin main > div > header :is(h1, h2, h3, h4, p, span, strong, b),
+.motion-page.route-kiprod-admin main #diagnostics,
+.motion-page.route-kiprod-admin main #diagnostics :is(h1, h2, h3, h4, p, span, strong, b) {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+.motion-page.route-kiprod-admin main > div > header > p:first-child,
+.motion-page.route-kiprod-admin main #diagnostics > p:first-child {
+  color: #f2c768 !important;
+  -webkit-text-fill-color: #f2c768 !important;
+}
+
+.motion-page.route-kiprod-admin main > div > header > p:nth-of-type(2),
+.motion-page.route-kiprod-admin main #diagnostics div > div > span {
+  color: #dbe5ef !important;
+  -webkit-text-fill-color: #dbe5ef !important;
+}
+
+/* Absolute KIPROD Admin contrast lock. Kept route-independent because the
+   dedicated portal layout can sit outside the route wrapper during hydration. */
+#dashboard > header > div span,
+#dashboard > header > div strong,
+#diagnostics span,
+#diagnostics strong {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+#dashboard > header > p:first-child,
+#diagnostics > p:first-child {
+  color: #f2c768 !important;
+  -webkit-text-fill-color: #f2c768 !important;
+  opacity: 1 !important;
+}
+
+#dashboard > header > p:nth-of-type(2) {
+  color: #dbe5ef !important;
+  -webkit-text-fill-color: #dbe5ef !important;
+  opacity: 1 !important;
+}

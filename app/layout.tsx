@@ -4,6 +4,7 @@ import "./globals.css";
 import MainNav from "./components/MainNav";
 import PageMotion from "./components/PageMotion";
 import PwaInstall from "./components/PwaInstall";
+import { getServerAccessContext } from "@/lib/accessServer";
 
 const manrope = Manrope({
   subsets: ["latin"],
@@ -44,15 +45,16 @@ export const viewport: Viewport = {
   colorScheme: "light",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const access = await getServerAccessContext();
   return (
     <html lang="en">
       <body className={manrope.className}>
-        <MainNav />
+        <MainNav activeRole={access.activeRole} executiveCockpitAllowed={access.executiveCockpitAllowed} />
         <PageMotion>{children}</PageMotion>
         <PwaInstall />
       </body>
