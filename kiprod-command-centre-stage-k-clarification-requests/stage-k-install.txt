@@ -1,0 +1,11 @@
+STAGE K — CLARIFICATION REQUESTS
+
+1. Extract the ZIP.
+2. Copy page.tsx.
+3. Paste it into:
+   Credit-risk-command-centre\app\clarification-requests
+4. Choose Replace the file in the destination.
+5. Restart npm run dev.
+6. Refresh with Ctrl + Shift + R.
+
+This patch replaces only app\clarification-requests\page.tsx.

@@ -1,0 +1,13 @@
+ AGENTS.md                        |  13 [32m+++[m
+ app/action-tracker/page.tsx      | 101 [32m++++++++++++++[m[31m---------[m
+ app/board-oversight/page.tsx     |  32 [32m++++[m[31m----[m
+ app/board-pack/page.tsx          |  64 [32m+++++++++++[m[31m----[m
+ app/dashboard/page.tsx           |   9 [32m++[m[31m-[m
+ app/early-warning/page.tsx       |  19 [32m++[m[31m---[m
+ app/executive-dashboard/page.tsx |  47 [32m++++++[m[31m-----[m
+ app/portfolio-upload/page.tsx    |  43 [32m+++++[m[31m-----[m
+ app/watchlist/page.tsx           |  49 [32m++++[m[31m--------[m
+ lib/riskPolicy.ts                | 168 [32m+++++++++++++++++++++++++++++++++++++++[m
+ package.json                     |   3 [32m+[m[31m-[m
+ scripts/verify-risk-policy.mjs   | 139 [32m++++++++++++++++++++++++++++++++[m
+ 12 files changed, 528 insertions(+), 159 deletions(-)

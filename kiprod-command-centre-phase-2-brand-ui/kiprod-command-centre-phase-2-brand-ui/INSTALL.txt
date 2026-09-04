@@ -1,0 +1,16 @@
+KIPROD COMMAND CENTRE — PHASE 2 BRANDING & UI ALIGNMENT
+
+1. Extract this ZIP outside the Credit-risk-command-centre project folder.
+2. Copy the included app folder.
+3. Paste it into the root of Credit-risk-command-centre.
+4. Choose Replace files in destination.
+5. Run: npm run build
+
+This patch changes only:
+- app/globals.css
+- app/components/MainNav.tsx
+- app/components/PwaInstall.tsx
+- app/board-pack/page.tsx
+
+It does not change Supabase, data logic, workflows, permissions, PWA assets,
+portfolio records, or governance register behaviour.

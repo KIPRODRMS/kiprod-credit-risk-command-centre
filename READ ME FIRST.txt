@@ -1,0 +1,46 @@
+KIPROD COMMAND CENTRE — FORMULA RESTORATION
+
+This package restores the accepted controlled-test formulas while retaining the re-upload protection fix.
+
+FILES TO OVERWRITE IN THE PROJECT:
+- app/portfolio-upload/page.tsx
+- app/executive-dashboard/page.tsx
+- app/board-pack/page.tsx
+- app/dashboard/page.tsx
+
+OFFICIAL CONTROLLED-TEST FORMULAS RESTORED:
+- Risk bands: Green = 0 DPD; Amber = 1–30; Red = 31–90; NPL = 91+
+- PAR30 = outstanding exposure where DPD > 30
+- PAR90 = outstanding exposure where DPD > 90
+- Watchlist = Amber + Red + NPL
+- Re-upload preserves existing action ownership, status, due date, notes, escalation and Board visibility.
+- Overdue = due date before today and action not Closed/Completed/Done.
+
+EXPECTED 200-ACCOUNT TEST RESULTS:
+- Green 140
+- Amber 30
+- Red 20
+- NPL 10
+- Watchlist 60
+- PAR30 accounts 30
+- PAR30 exposure KES 16,967,115 (~14.6%)
+- PAR90 accounts 10
+- PAR90 exposure KES 5,683,205 (~4.9%)
+- Open actions 60
+- Restored overdue actions 60
+- Escalated accounts 17
+- High exposure accounts 10
+
+ONE-TIME BROWSER DATA REPAIR:
+The earlier re-upload already reset the due dates in localStorage. Code cannot infer the old dates after the fact. Open the deployed Command Centre in the same browser, press F12 > Console, open the file named:
+
+RESTORE 60 OVERDUE ACTIONS.js
+
+Copy the entire file into Console and press Enter ONCE.
+
+The script validates that the browser currently contains exactly the controlled 200-account / 60-action test portfolio before changing anything. It creates a localStorage backup first and changes due dates only. Owners, statuses, notes, escalation and Board visibility are preserved.
+
+THEN BUILD:
+npm run build
+
+DO NOT PUSH UNTIL THE BUILD PASSES.

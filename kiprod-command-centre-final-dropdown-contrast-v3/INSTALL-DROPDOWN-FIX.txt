@@ -1,0 +1,19 @@
+KIPROD COMMAND CENTRE — FINAL DROPDOWN CONTRAST FIX
+
+This is the complete matched all-pages app package. It includes the premium
+design, motion/mobile update, and the final cross-platform dropdown contrast
+rules.
+
+1. Copy the included app folder into the Credit-risk-command-centre root.
+2. Choose Replace files in destination.
+3. Do not apply any earlier Command Centre CSS patch afterward.
+4. Run:
+
+   Remove-Item -Recurse -Force .next
+   npm run build
+   npm run dev
+
+5. Hard-refresh the browser with Ctrl + Shift + R.
+
+Dropdowns now use white menu surfaces, deep navy text, visible selected values,
+KIPROD-gold focus states, accessible disabled states, and phone-safe sizing.

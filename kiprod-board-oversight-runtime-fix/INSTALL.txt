@@ -1,0 +1,11 @@
+STAGE I - BOARD OVERSIGHT
+
+1. Copy page.tsx.
+2. Open:
+   C:\Users\user\Documents\APPS\KIPROD\Credit-risk-command-centre\app\board-oversight
+3. Paste page.tsx into that folder.
+4. Choose "Replace the file in the destination".
+5. Restart npm run dev and refresh the browser.
+
+This patch replaces only:
+app\board-oversight\page.tsx

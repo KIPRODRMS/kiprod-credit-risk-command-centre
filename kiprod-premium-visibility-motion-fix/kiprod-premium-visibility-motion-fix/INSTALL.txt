@@ -1,0 +1,12 @@
+KIPROD COMMAND CENTRE — PREMIUM PAGE 1
+
+1. Copy the included app folder.
+2. Paste it into the Credit-risk-command-centre project root.
+3. Choose Replace files in destination.
+4. Run: npm run build
+
+This patch changes only:
+- app/page.tsx
+- app/globals.css
+
+It does not change Supabase, data, workflows, navigation, PWA setup or reports.

@@ -1,0 +1,1 @@
+Replace app\board-pack\page.tsx with this page.tsx, then hard-refresh the browser.

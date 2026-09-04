@@ -1,0 +1,9 @@
+KIPROD EXECUTION REGISTER COLOUR FIX
+
+1. Extract the ZIP.
+2. Copy page.tsx.
+3. Paste it into Credit-risk-command-centre\app\action-tracker.
+4. Choose Replace the file in the destination.
+5. Restart npm run dev and refresh with Ctrl + Shift + R.
+
+This patch replaces only app\action-tracker\page.tsx.

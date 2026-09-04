@@ -1,0 +1,12 @@
+KIPROD COMMAND CENTRE - SIDE DRAWER MENU
+
+1. Extract the ZIP.
+2. Copy MainNav.tsx.
+3. Paste it into:
+   Credit-risk-command-centre\app\components
+4. Choose Replace the file.
+5. Restart npm run dev.
+6. Refresh with Ctrl + Shift + R.
+
+This replaces only app\components\MainNav.tsx.
+Nothing is pushed automatically.

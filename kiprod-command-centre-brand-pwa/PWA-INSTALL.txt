@@ -1,0 +1,32 @@
+KIPROD CREDIT RISK COMMAND CENTRE — BRAND + PWA PATCH
+
+This patch adds:
+- A distinct Command Centre logo and complete app icon set
+- Android, iPhone/iPad, and desktop PWA installation
+- A visible Install Command Centre prompt where supported
+- Correct iPhone/iPad Add to Home Screen guidance
+- Branded installed-app metadata and system colours
+- A safe offline reconnect screen (no stale risk data is cached)
+
+INSTALL
+1. Extract this ZIP.
+2. Open the extracted folder.
+3. Copy these three items:
+   - app
+   - public
+   - next.config.ts
+4. Paste them into the root of:
+   Credit-risk-command-centre
+5. Choose "Replace the files in the destination" when Windows asks.
+6. Run:
+   npm run build
+7. If the build passes, run:
+   git add app public next.config.ts
+   git commit -m "Add Command Centre identity and PWA installation"
+   git push origin main
+
+NOTES
+- Existing application pages and data logic are not replaced.
+- The browser install prompt requires HTTPS in production; Vercel provides this.
+- On iPhone/iPad, install from Safari: Share > Add to Home Screen.
+- On Android/desktop Chrome or Edge, use the in-app Install Command Centre button.

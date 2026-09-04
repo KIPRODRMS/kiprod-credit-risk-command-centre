@@ -1,0 +1,15 @@
+KIPROD PREMIUM EXECUTIVE COCKPIT
+
+1. Extract this package outside the project folder.
+2. Copy the included app folder.
+3. Paste it into the Credit-risk-command-centre project root.
+4. Choose Replace files in destination.
+5. Run: npm run build
+6. Start the app and check /executive-dashboard on phone and laptop before pushing.
+
+Files changed:
+- app/executive-dashboard/page.tsx
+- app/globals.css
+
+This presentation upgrade preserves existing local portfolio storage, workflows,
+navigation, Supabase configuration, PWA files and Board Report logic.

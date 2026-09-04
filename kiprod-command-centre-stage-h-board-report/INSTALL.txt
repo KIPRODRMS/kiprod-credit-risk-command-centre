@@ -1,0 +1,10 @@
+STAGE H - BOARD REPORT
+
+1. Copy the page.tsx file in this folder.
+2. Open:
+   C:\Users\user\Documents\APPS\KIPROD\Credit-risk-command-centre\app\board-pack
+3. Paste page.tsx into that exact folder.
+4. Choose "Replace the file in the destination".
+5. Stop the development server with Ctrl+C, run npm run dev, then refresh.
+
+This patch replaces only app\board-pack\page.tsx.

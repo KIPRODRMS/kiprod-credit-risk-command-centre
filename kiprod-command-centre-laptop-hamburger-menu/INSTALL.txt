@@ -1,0 +1,8 @@
+KIPROD COMMAND CENTRE — LAPTOP HAMBURGER MENU
+
+1. Copy the included app folder.
+2. Paste it into the Credit-risk-command-centre project root.
+3. Choose Replace files in destination.
+4. Restart npm run dev and refresh the browser.
+
+This patch replaces only app/components/MainNav.tsx.

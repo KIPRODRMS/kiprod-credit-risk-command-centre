@@ -1,0 +1,17 @@
+KIPROD COMMAND CENTRE — COMPLETE PHONE VIEW UPDATE
+
+1. Extract this ZIP.
+2. Copy the included app folder into the root of Credit-risk-command-centre.
+3. Choose Replace files in destination when Windows asks.
+4. Run npm run build.
+5. Commit only the two changed files:
+   git add app/components/MainNav.tsx app/globals.css
+   git commit -m "Add complete mobile phone view"
+   git push origin main
+
+This update changes only:
+- app/components/MainNav.tsx
+- app/globals.css
+
+It adds the phone hamburger menu and shared narrow-screen layout rules without
+changing page data, workflows, desktop layouts, or Execution Register colours.
