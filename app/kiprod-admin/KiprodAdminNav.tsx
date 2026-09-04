@@ -39,13 +39,17 @@ export default function KiprodAdminNav() {
 
         <nav className="hidden items-center gap-1 xl:flex">
           {items.map(([label, href]) => (
-            <Link
+            <a
               key={label}
               href={href}
-              className="rounded-lg px-3 py-2 text-xs font-bold text-slate-200 hover:bg-white/10"
+              className={`rounded-lg px-3 py-2 text-xs font-bold ${
+                label === "Add User"
+                  ? "bg-violet-700 text-white hover:bg-violet-600"
+                  : "text-slate-200 hover:bg-white/10"
+              }`}
             >
               {label}
-            </Link>
+            </a>
           ))}
         </nav>
 
@@ -61,14 +65,18 @@ export default function KiprodAdminNav() {
       {open && (
         <nav className="grid gap-1 border-t border-white/10 p-4 xl:hidden">
           {items.map(([label, href]) => (
-            <Link
+            <a
               key={label}
               href={href}
               onClick={() => setOpen(false)}
-              className="rounded-xl bg-white/5 px-4 py-3 text-sm font-bold"
+              className={`rounded-xl px-4 py-3 text-sm font-bold ${
+                label === "Add User"
+                  ? "bg-violet-700 text-white"
+                  : "bg-white/5 text-white"
+              }`}
             >
               {label}
-            </Link>
+            </a>
           ))}
         </nav>
       )}
