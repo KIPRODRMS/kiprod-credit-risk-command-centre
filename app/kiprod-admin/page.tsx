@@ -3,54 +3,560 @@ import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getServerAccessContext } from "@/lib/accessServer";
 import InstitutionForm from "./InstitutionForm";
+import InstitutionWorkspace from "./InstitutionWorkspace";
 import UserSupportControls from "./UserSupportControls";
-import { setExecutiveCockpitAccess, setInstitutionStatus, setPlatformUserStatus } from "./actions";
+import {
+  setExecutiveCockpitAccess,
+  setInstitutionStatus,
+  setPlatformUserStatus,
+} from "./actions";
 
-type InstitutionRow = { id: string; name: string; slug: string; approved_domain: string | null; primary_contact_email: string | null; status: string; created_at: string; updated_at: string };
-type UserRow = { user_id: string; institution_id: string | null; full_name: string | null; email: string; roles: string[]; status: string };
-type AuthEvent = { id: string; email: string | null; event_type: string; selected_role: string | null; note: string | null; created_at: string };
-type AccessSetting = { institution_id: string; executive_cockpit_roles: string[] };
+type InstitutionRow = {
+  id: string;
+  name: string;
+  slug: string;
+  approved_domain: string | null;
+  primary_contact_email: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
 
-const dateTime = (value: string) => new Date(value).toLocaleString("en-KE", { dateStyle: "medium", timeStyle: "short" });
+type UserRow = {
+  user_id: string;
+  institution_id: string | null;
+  full_name: string | null;
+  email: string;
+  roles: string[];
+  status: string;
+};
+
+type AuthEvent = {
+  id: string;
+  email: string | null;
+  event_type: string;
+  selected_role: string | null;
+  note: string | null;
+  created_at: string;
+};
+
+type AccessSetting = {
+  institution_id: string;
+  executive_cockpit_roles: string[];
+};
+
+const dateTime = (value: string) =>
+  new Date(value).toLocaleString("en-KE", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 
 export default async function KiprodAdminPage() {
   const access = await getServerAccessContext();
-  if (access.activeRole !== "KIPROD Admin") redirect(access.activeRole ? "/" : "/login");
+
+  if (access.activeRole !== "KIPROD Admin") {
+    redirect(access.activeRole ? "/" : "/login");
+  }
+
   const supabase = await createServerSupabaseClient();
-  const [institutionResult, userResult, eventResult, auditResult, settingsResult] = await Promise.all([
-    supabase.from("institutions").select("id,name,slug,approved_domain,primary_contact_email,status,created_at,updated_at").order("created_at", { ascending: false }),
-    supabase.from("user_profiles").select("user_id,institution_id,full_name,email,roles,status").order("created_at", { ascending: false }),
-    supabase.from("authentication_events").select("id,email,event_type,selected_role,note,created_at").order("created_at", { ascending: false }).limit(12),
+
+  const [
+    institutionResult,
+    userResult,
+    eventResult,
+    auditResult,
+    settingsResult,
+  ] = await Promise.all([
+    supabase
+      .from("institutions")
+      .select(
+        "id,name,slug,approved_domain,primary_contact_email,status,created_at,updated_at",
+      )
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("user_profiles")
+      .select("user_id,institution_id,full_name,email,roles,status")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("authentication_events")
+      .select("id,email,event_type,selected_role,note,created_at")
+      .order("created_at", { ascending: false })
+      .limit(12),
     supabase.from("audit_logs").select("id", { count: "exact", head: true }),
-    supabase.from("institution_access_settings").select("institution_id,executive_cockpit_roles"),
+    supabase
+      .from("institution_access_settings")
+      .select("institution_id,executive_cockpit_roles"),
   ]);
+
   const institutions = (institutionResult.data || []) as InstitutionRow[];
   const users = (userResult.data || []) as UserRow[];
   const events = (eventResult.data || []) as AuthEvent[];
   const accessSettings = (settingsResult.data || []) as AccessSetting[];
+
   const schemaReady = !institutionResult.error && !userResult.error;
-  const activeInstitutions = institutions.filter((row) => row.status === "Active").length;
-  const disabledUsers = users.filter((row) => row.status === "Disabled").length;
-  const failedLogins = events.filter((row) => row.event_type === "LOGIN_FAILED" || row.event_type === "DISABLED_LOGIN_BLOCKED").length;
-  const metric = (label: string, value: string | number, note: string) => <article className="rounded-2xl border bg-white p-5 shadow-sm"><p className="text-xs font-black uppercase tracking-wide text-slate-500">{label}</p><p className="mt-2 text-3xl font-black text-slate-950">{value}</p><p className="mt-2 text-xs text-slate-600">{note}</p></article>;
+  const activeInstitutions = institutions.filter(
+    (row) => row.status === "Active",
+  ).length;
+  const disabledUsers = users.filter(
+    (row) => row.status === "Disabled",
+  ).length;
+  const failedLogins = events.filter(
+    (row) =>
+      row.event_type === "LOGIN_FAILED" ||
+      row.event_type === "DISABLED_LOGIN_BLOCKED",
+  ).length;
 
-  return <main className="min-h-screen bg-[#eef2f6] p-4 text-slate-950 sm:p-8"><div id="dashboard" className="mx-auto max-w-[1550px] space-y-7">
-    <header className="overflow-hidden rounded-[2rem] bg-[#071426] p-8 text-white shadow-2xl lg:p-10"><p className="text-xs font-black uppercase tracking-[.22em] text-violet-300">KIPROD platform command</p><h1 className="mt-3 text-3xl font-black sm:text-5xl">KIPROD Admin Dashboard</h1><p className="mt-4 max-w-4xl leading-7 text-slate-300">Provision institutions, support administrators, monitor authentication and diagnose platform access across every subscribed institution—without altering their portfolio records or audit evidence.</p><div className="mt-6 flex flex-wrap gap-3 text-xs font-bold"><span className="rounded-full border border-white/15 bg-white/5 px-4 py-2">Cross-institution support</span><span className="rounded-full border border-white/15 bg-white/5 px-4 py-2">Read-only audit evidence</span><span className="rounded-full border border-white/15 bg-white/5 px-4 py-2">No risk-policy controls</span></div></header>
+  const metric = (
+    label: string,
+    value: string | number,
+    note: string,
+  ) => (
+    <article className="rounded-2xl border bg-white p-5 shadow-sm">
+      <p className="text-xs font-black uppercase tracking-wide text-slate-500">
+        {label}
+      </p>
+      <p className="mt-2 text-3xl font-black text-slate-950">{value}</p>
+      <p className="mt-2 text-xs text-slate-600">{note}</p>
+    </article>
+  );
 
-    {!schemaReady && <section className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-950"><strong>Database setup required.</strong><p className="mt-2">Run the new multi-institution Supabase migration before using platform provisioning. The dashboard itself is installed and protected.</p></section>}
+  return (
+    <main className="min-h-screen bg-[#eef2f6] p-4 text-slate-950 sm:p-8">
+      <div
+        id="dashboard"
+        className="mx-auto max-w-[1550px] space-y-7"
+      >
+        <header className="overflow-hidden rounded-[2rem] bg-[#071426] p-8 text-white shadow-2xl lg:p-10">
+          <p className="text-xs font-black uppercase tracking-[.22em] text-violet-300">
+            KIPROD platform command
+          </p>
+          <h1 className="mt-3 text-3xl font-black sm:text-5xl">
+            KIPROD Admin Dashboard
+          </h1>
+          <p className="mt-4 max-w-4xl leading-7 text-slate-300">
+            Provision institutions, open any institution to edit its
+            details, review enrolled users and add Board, executive or
+            management accounts directly under that institution.
+          </p>
+          <div className="mt-6 flex flex-wrap gap-3 text-xs font-bold">
+            <span className="rounded-full border border-white/15 bg-white/5 px-4 py-2">
+              Cross-institution support
+            </span>
+            <span className="rounded-full border border-white/15 bg-white/5 px-4 py-2">
+              Read-only audit evidence
+            </span>
+            <span className="rounded-full border border-white/15 bg-white/5 px-4 py-2">
+              No risk-policy controls
+            </span>
+          </div>
+        </header>
 
-    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">{metric("Institutions", institutions.length, `${activeInstitutions} active`)}{metric("Platform users", users.length, "All institution accounts")}{metric("Disabled users", disabledUsers, "Blocked at server access")}{metric("Recent failed access", failedLogins, "Latest authentication events")}{metric("Audit evidence", auditResult.count || 0, "Append-only platform records")}</section>
+        {!schemaReady && (
+          <section className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-950">
+            <strong>Database setup required.</strong>
+            <p className="mt-2">
+              Run the multi-institution Supabase migration before using
+              platform provisioning.
+            </p>
+          </section>
+        )}
 
-    <section id="institutions" className="scroll-mt-28 rounded-3xl bg-white p-6 shadow-sm"><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[.18em] text-violet-700">Tenant operations</p><h2 className="mt-1 text-2xl font-black">Institutions</h2><p className="mt-2 text-sm text-slate-600">Every institution remains isolated by institution ID and Row-Level Security.</p></div><Link href="#provisioning" className="rounded-xl bg-violet-700 px-4 py-3 text-sm font-black text-white">Add institution</Link></div><div className="mt-5 overflow-x-auto"><table className="w-full min-w-[1000px] text-left text-sm"><thead><tr className="border-b text-xs uppercase text-slate-500">{["Institution","Domain","First contact","Users","Status","Last updated","Control"].map((head)=><th key={head} className="px-3 py-3">{head}</th>)}</tr></thead><tbody>{institutions.map((institution)=>{const institutionUsers=users.filter((user)=>user.institution_id===institution.id);return <tr key={institution.id} className="border-b"><td className="px-3 py-4"><strong>{institution.name}</strong><p className="text-xs text-slate-500">{institution.slug}</p></td><td className="px-3 py-4">{institution.approved_domain||"Not restricted"}</td><td className="px-3 py-4">{institution.primary_contact_email||"Not recorded"}</td><td className="px-3 py-4 font-black">{institutionUsers.length}</td><td className="px-3 py-4 font-black">{institution.status}</td><td className="px-3 py-4">{dateTime(institution.updated_at)}</td><td className="px-3 py-4"><form action={setInstitutionStatus}><input type="hidden" name="institutionId" value={institution.id}/><input type="hidden" name="status" value={institution.status==="Active"?"Suspended":"Active"}/><button className="rounded-lg border px-3 py-2 font-bold">{institution.status==="Active"?"Suspend":"Activate"}</button></form></td></tr>})}{!institutions.length&&<tr><td colSpan={7} className="px-3 py-8 text-center text-slate-500">No institutions have been provisioned.</td></tr>}</tbody></table></div></section>
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          {metric(
+            "Institutions",
+            institutions.length,
+            `${activeInstitutions} active`,
+          )}
+          {metric(
+            "Platform users",
+            users.length,
+            "All institution accounts",
+          )}
+          {metric(
+            "Disabled users",
+            disabledUsers,
+            "Blocked at server access",
+          )}
+          {metric(
+            "Recent failed access",
+            failedLogins,
+            "Latest authentication events",
+          )}
+          {metric(
+            "Audit evidence",
+            auditResult.count || 0,
+            "Append-only platform records",
+          )}
+        </section>
 
-    <section id="users" className="scroll-mt-28 rounded-3xl bg-white p-6 shadow-sm"><div><p className="text-xs font-black uppercase tracking-[.18em] text-violet-700">Support registry</p><h2 className="mt-1 text-2xl font-black">Platform users</h2><p className="mt-2 text-sm text-slate-600">KIPROD support can diagnose access and block compromised accounts. Institution role assignment remains with the Institution Admin.</p></div><div className="mt-5 overflow-x-auto"><table className="w-full min-w-[900px] text-left text-sm"><thead><tr className="border-b text-xs uppercase text-slate-500">{["User","Institution","Approved role","Status","Support control"].map((head)=><th key={head} className="px-3 py-3">{head}</th>)}</tr></thead><tbody>{users.map((user)=>{const institution=institutions.find((row)=>row.id===user.institution_id);const isCurrentUser=user.user_id===access.userId;return <tr key={user.user_id} className="border-b"><td className="px-3 py-4"><strong>{user.full_name||"Name not recorded"}</strong><p className="text-xs text-slate-500">{user.email}</p></td><td className="px-3 py-4">{institution?.name||"KIPROD platform"}</td><td className="px-3 py-4">{user.roles.join(", ")||"No role"}</td><td className="px-3 py-4 font-black">{user.status}</td><td className="px-3 py-4">{isCurrentUser?<span className="text-xs font-bold text-slate-500">Current KIPROD Admin</span>:<form action={setPlatformUserStatus}><input type="hidden" name="userId" value={user.user_id}/><input type="hidden" name="status" value={user.status==="Disabled"?"Active":"Disabled"}/><button className="rounded-lg border px-3 py-2 font-bold">{user.status==="Disabled"?"Reactivate":"Disable access"}</button></form>}</td></tr>})}{!users.length&&<tr><td colSpan={5} className="px-3 py-8 text-center text-slate-500">No users are available until the database migration is applied.</td></tr>}</tbody></table></div></section>
+        <section
+          id="institutions"
+          className="scroll-mt-28 rounded-3xl bg-white p-6 shadow-sm"
+        >
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[.18em] text-violet-700">
+                Tenant operations
+              </p>
+              <h2 className="mt-1 text-2xl font-black">
+                Institutions
+              </h2>
+              <p className="mt-2 text-sm text-slate-600">
+                Click an institution to edit its details, see everyone
+                enrolled and add more users inside the same institution.
+              </p>
+            </div>
 
-    <section className="rounded-3xl bg-white p-6 shadow-sm"><p className="text-xs font-black uppercase tracking-[.18em] text-violet-700">Account administration</p><h2 className="mt-1 text-2xl font-black">User details and recovery</h2><p className="mt-2 text-sm text-slate-600">Edit approved account details, resend activation and trigger secure password recovery. Every action is recorded.</p><div className="mt-5 grid gap-4 xl:grid-cols-2">{users.map((user)=><UserSupportControls key={user.user_id} user={user} institutions={institutions.map(({id,name})=>({id,name}))} isCurrentUser={user.user_id===access.userId}/>)}</div></section>
+            <Link
+              href="#provisioning"
+              className="rounded-xl bg-violet-700 px-4 py-3 text-sm font-black text-white"
+            >
+              Create new institution
+            </Link>
+          </div>
 
-    <section id="provisioning" className="scroll-mt-28 rounded-3xl bg-white p-6 shadow-sm"><p className="text-xs font-black uppercase tracking-[.18em] text-violet-700">Institution onboarding</p><h2 className="mt-1 text-2xl font-black">Create institution and first administrator</h2><p className="mb-6 mt-2 text-sm text-slate-600">The first account is always Institution Admin. That administrator creates the institution’s remaining personal accounts.</p><InstitutionForm /></section>
+          <div className="mt-5 space-y-4">
+            {institutions.map((institution) => {
+              const institutionUsers = users.filter(
+                (user) => user.institution_id === institution.id,
+              );
 
-    <section className="rounded-3xl bg-white p-6 shadow-sm"><p className="text-xs font-black uppercase tracking-[.18em] text-violet-700">Approved flexibility</p><h2 className="mt-1 text-2xl font-black">Executive Cockpit permissions</h2><p className="mt-2 text-sm text-slate-600">CEO access is always enabled. Risk Manager and Credit Manager access may be approved per institution.</p><div className="mt-5 grid gap-4 lg:grid-cols-2">{institutions.map((institution)=>{const roles=accessSettings.find((item)=>item.institution_id===institution.id)?.executive_cockpit_roles||["CEO"];return <form key={institution.id} action={setExecutiveCockpitAccess} className="rounded-2xl border p-5"><input type="hidden" name="institutionId" value={institution.id}/><strong>{institution.name}</strong><div className="mt-4 flex flex-wrap gap-4 text-sm"><label className="font-bold"><input type="checkbox" checked readOnly className="mr-2"/>CEO</label><label className="font-bold"><input name="riskManager" type="checkbox" defaultChecked={roles.includes("Risk Manager")} className="mr-2"/>Risk Manager</label><label className="font-bold"><input name="creditManager" type="checkbox" defaultChecked={roles.includes("Credit Manager")} className="mr-2"/>Credit Manager</label></div><button className="mt-4 rounded-lg bg-slate-950 px-4 py-2 text-xs font-black text-white">Save Cockpit access</button></form>})}{!institutions.length&&<p className="text-sm text-slate-500">Create an institution before configuring access.</p>}</div></section>
+              return (
+                <InstitutionWorkspace
+                  key={institution.id}
+                  institution={institution}
+                  users={institutionUsers}
+                />
+              );
+            })}
 
-    <section id="security" className="grid scroll-mt-28 gap-6 xl:grid-cols-[1.1fr_.9fr]"><div className="rounded-3xl bg-white p-6 shadow-sm"><p className="text-xs font-black uppercase tracking-[.18em] text-violet-700">Authentication security</p><h2 className="mt-1 text-2xl font-black">Recent access events</h2><div className="mt-5 divide-y">{events.map((event)=><div key={event.id} className="grid gap-1 py-3 sm:grid-cols-[170px_1fr_180px]"><span className="text-xs text-slate-500">{dateTime(event.created_at)}</span><div><strong>{event.event_type.replaceAll("_"," ")}</strong><p className="text-xs text-slate-600">{event.email||"Email unavailable"} · {event.note||"No note"}</p></div><span className="text-xs font-bold">{event.selected_role||"No role"}</span></div>)}{!events.length&&<p className="py-6 text-slate-500">No authentication events recorded yet.</p>}</div></div><div id="diagnostics" className="scroll-mt-28 rounded-3xl bg-[#071426] p-6 text-white shadow-xl"><p className="text-xs font-black uppercase tracking-[.18em] text-violet-300">Support diagnostics</p><h2 className="mt-2 text-2xl font-black">Platform readiness</h2><div className="mt-5 space-y-3">{[["Authentication","Connected"],["Multi-institution schema",schemaReady?"Ready":"Migration required"],["Role enforcement","Server active"],["Audit integrity","Append-only"],["Locked risk policy","Protected"]].map(([label,value])=><div key={label} className="flex justify-between gap-4 rounded-xl border border-white/10 bg-white/5 p-4"><span className="text-sm text-slate-300">{label}</span><strong className="text-sm text-white">{value}</strong></div>)}</div></div></section>
-  </div></main>;
+            {!institutions.length && (
+              <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-slate-500">
+                No institutions have been provisioned.
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section
+          id="users"
+          className="scroll-mt-28 rounded-3xl bg-white p-6 shadow-sm"
+        >
+          <div>
+            <p className="text-xs font-black uppercase tracking-[.18em] text-violet-700">
+              Platform support registry
+            </p>
+            <h2 className="mt-1 text-2xl font-black">
+              All platform users
+            </h2>
+            <p className="mt-2 text-sm text-slate-600">
+              This is the cross-institution support view. Day-to-day user
+              enrolment now happens inside each institution above.
+            </p>
+          </div>
+
+          <div className="mt-5 overflow-x-auto">
+            <table className="w-full min-w-[900px] text-left text-sm">
+              <thead>
+                <tr className="border-b text-xs uppercase text-slate-500">
+                  {[
+                    "User",
+                    "Institution",
+                    "Approved role",
+                    "Status",
+                    "Support control",
+                  ].map((head) => (
+                    <th key={head} className="px-3 py-3">
+                      {head}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((user) => {
+                  const institution = institutions.find(
+                    (row) => row.id === user.institution_id,
+                  );
+                  const isCurrentUser =
+                    user.user_id === access.userId;
+
+                  return (
+                    <tr key={user.user_id} className="border-b">
+                      <td className="px-3 py-4">
+                        <strong>
+                          {user.full_name || "Name not recorded"}
+                        </strong>
+                        <p className="text-xs text-slate-500">
+                          {user.email}
+                        </p>
+                      </td>
+                      <td className="px-3 py-4">
+                        {institution?.name || "KIPROD platform"}
+                      </td>
+                      <td className="px-3 py-4">
+                        {user.roles.join(", ") || "No role"}
+                      </td>
+                      <td className="px-3 py-4 font-black">
+                        {user.status}
+                      </td>
+                      <td className="px-3 py-4">
+                        {isCurrentUser ? (
+                          <span className="text-xs font-bold text-slate-500">
+                            Current KIPROD Admin
+                          </span>
+                        ) : (
+                          <form action={setPlatformUserStatus}>
+                            <input
+                              type="hidden"
+                              name="userId"
+                              value={user.user_id}
+                            />
+                            <input
+                              type="hidden"
+                              name="status"
+                              value={
+                                user.status === "Disabled"
+                                  ? "Active"
+                                  : "Disabled"
+                              }
+                            />
+                            <button className="rounded-lg border px-3 py-2 font-bold">
+                              {user.status === "Disabled"
+                                ? "Reactivate"
+                                : "Disable access"}
+                            </button>
+                          </form>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {!users.length && (
+                  <tr>
+                    <td
+                      colSpan={5}
+                      className="px-3 py-8 text-center text-slate-500"
+                    >
+                      No users are available until the database migration
+                      is applied.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="rounded-3xl bg-white p-6 shadow-sm">
+          <p className="text-xs font-black uppercase tracking-[.18em] text-violet-700">
+            Account administration
+          </p>
+          <h2 className="mt-1 text-2xl font-black">
+            User details and recovery
+          </h2>
+          <p className="mt-2 text-sm text-slate-600">
+            Edit approved account details, resend activation and trigger
+            secure password recovery. Every action is recorded.
+          </p>
+
+          <div className="mt-5 grid gap-4 xl:grid-cols-2">
+            {users.map((user) => (
+              <UserSupportControls
+                key={user.user_id}
+                user={user}
+                institutions={institutions.map(({ id, name }) => ({
+                  id,
+                  name,
+                }))}
+                isCurrentUser={user.user_id === access.userId}
+              />
+            ))}
+          </div>
+        </section>
+
+        <section
+          id="provisioning"
+          className="scroll-mt-28 rounded-3xl bg-white p-6 shadow-sm"
+        >
+          <p className="text-xs font-black uppercase tracking-[.18em] text-violet-700">
+            Institution onboarding
+          </p>
+          <h2 className="mt-1 text-2xl font-black">
+            Create institution and first administrator
+          </h2>
+          <p className="mb-6 mt-2 text-sm text-slate-600">
+            Use this only when onboarding a brand-new institution. After
+            creation, return to Institutions above and open that
+            institution to add its remaining users.
+          </p>
+          <InstitutionForm />
+        </section>
+
+        <section className="rounded-3xl bg-white p-6 shadow-sm">
+          <p className="text-xs font-black uppercase tracking-[.18em] text-violet-700">
+            Approved flexibility
+          </p>
+          <h2 className="mt-1 text-2xl font-black">
+            Executive Cockpit permissions
+          </h2>
+          <p className="mt-2 text-sm text-slate-600">
+            CEO access is always enabled. Risk Manager and Credit Manager
+            access may be approved per institution.
+          </p>
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            {institutions.map((institution) => {
+              const roles =
+                accessSettings.find(
+                  (item) =>
+                    item.institution_id === institution.id,
+                )?.executive_cockpit_roles || ["CEO"];
+
+              return (
+                <form
+                  key={institution.id}
+                  action={setExecutiveCockpitAccess}
+                  className="rounded-2xl border p-5"
+                >
+                  <input
+                    type="hidden"
+                    name="institutionId"
+                    value={institution.id}
+                  />
+                  <strong>{institution.name}</strong>
+
+                  <div className="mt-4 flex flex-wrap gap-4 text-sm">
+                    <label className="font-bold">
+                      <input
+                        type="checkbox"
+                        checked
+                        readOnly
+                        className="mr-2"
+                      />
+                      CEO
+                    </label>
+
+                    <label className="font-bold">
+                      <input
+                        name="riskManager"
+                        type="checkbox"
+                        defaultChecked={roles.includes("Risk Manager")}
+                        className="mr-2"
+                      />
+                      Risk Manager
+                    </label>
+
+                    <label className="font-bold">
+                      <input
+                        name="creditManager"
+                        type="checkbox"
+                        defaultChecked={roles.includes(
+                          "Credit Manager",
+                        )}
+                        className="mr-2"
+                      />
+                      Credit Manager
+                    </label>
+                  </div>
+
+                  <button className="mt-4 rounded-lg bg-slate-950 px-4 py-2 text-xs font-black text-white">
+                    Save Cockpit access
+                  </button>
+                </form>
+              );
+            })}
+
+            {!institutions.length && (
+              <p className="text-sm text-slate-500">
+                Create an institution before configuring access.
+              </p>
+            )}
+          </div>
+        </section>
+
+        <section
+          id="security"
+          className="grid scroll-mt-28 gap-6 xl:grid-cols-[1.1fr_.9fr]"
+        >
+          <div className="rounded-3xl bg-white p-6 shadow-sm">
+            <p className="text-xs font-black uppercase tracking-[.18em] text-violet-700">
+              Authentication security
+            </p>
+            <h2 className="mt-1 text-2xl font-black">
+              Recent access events
+            </h2>
+
+            <div className="mt-5 divide-y">
+              {events.map((event) => (
+                <div
+                  key={event.id}
+                  className="grid gap-1 py-3 sm:grid-cols-[170px_1fr_180px]"
+                >
+                  <span className="text-xs text-slate-500">
+                    {dateTime(event.created_at)}
+                  </span>
+                  <div>
+                    <strong>
+                      {event.event_type.replaceAll("_", " ")}
+                    </strong>
+                    <p className="text-xs text-slate-600">
+                      {event.email || "Email unavailable"} ·{" "}
+                      {event.note || "No note"}
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold">
+                    {event.selected_role || "No role"}
+                  </span>
+                </div>
+              ))}
+
+              {!events.length && (
+                <p className="py-6 text-slate-500">
+                  No authentication events recorded yet.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div
+            id="diagnostics"
+            className="scroll-mt-28 rounded-3xl bg-[#071426] p-6 text-white shadow-xl"
+          >
+            <p className="text-xs font-black uppercase tracking-[.18em] text-violet-300">
+              Support diagnostics
+            </p>
+            <h2 className="mt-2 text-2xl font-black">
+              Platform readiness
+            </h2>
+
+            <div className="mt-5 space-y-3">
+              {[
+                ["Authentication", "Connected"],
+                [
+                  "Multi-institution schema",
+                  schemaReady ? "Ready" : "Migration required",
+                ],
+                ["Role enforcement", "Server active"],
+                ["Audit integrity", "Append-only"],
+                ["Locked risk policy", "Protected"],
+              ].map(([label, value]) => (
+                <div
+                  key={label}
+                  className="flex justify-between gap-4 rounded-xl border border-white/10 bg-white/5 p-4"
+                >
+                  <span className="text-sm text-slate-300">
+                    {label}
+                  </span>
+                  <strong className="text-sm text-white">
+                    {value}
+                  </strong>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
 }
