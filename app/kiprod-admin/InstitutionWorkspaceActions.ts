@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import { createClient } from "@supabase/supabase-js";
 import { headers } from "next/headers";
@@ -16,6 +16,8 @@ export type InstitutionWorkspaceState =
 
 const STRONG_PASSWORD =
   /^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{12,}$/;
+
+const MIN_PASSWORD_LENGTH = 6;
 
 const INSTITUTION_ROLES: PortalRole[] = [
   "Institution Admin",
@@ -187,11 +189,11 @@ export async function addInstitutionUser(
     };
   }
 
-  if (!STRONG_PASSWORD.test(temporaryPassword)) {
+  if (temporaryPassword.length < MIN_PASSWORD_LENGTH) {
     return {
       ok: false,
       message:
-        "Temporary password must be at least 12 characters with uppercase, lowercase, a number and a symbol.",
+        "Temporary password must be at least 6 characters.",
     };
   }
 
@@ -295,3 +297,5 @@ export async function addInstitutionUser(
       : `${fullName} was added as ${role}. A confirmation email has been sent.`,
   };
 }
+
+

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useActionState } from "react";
 import {
@@ -70,7 +70,7 @@ export default function InstitutionWorkspace({
             </span>
           </div>
           <p className="mt-1 text-sm text-slate-500">
-            {institution.slug} · {users.length} enrolled user
+            {institution.slug} Â· {users.length} enrolled user
             {users.length === 1 ? "" : "s"}
           </p>
         </div>
@@ -223,10 +223,10 @@ export default function InstitutionWorkspace({
                 <input
                   name="temporaryPassword"
                   type="password"
-                  minLength={12}
+                  minLength={6}
                   required
                   className={field}
-                  placeholder="12+ chars, upper/lower, number, symbol"
+                  placeholder="Minimum 6 characters"
                 />
               </label>
 
@@ -311,3 +311,4 @@ export default function InstitutionWorkspace({
     </details>
   );
 }
+
